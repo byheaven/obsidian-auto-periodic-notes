@@ -1,15 +1,14 @@
-import { Notice, TFile } from 'obsidian';
-import type { IPeriodicitySettings, ISettings } from '../settings';
-import type { ObsidianWorkspace } from '../types';
-import DailyNote from './DailyNote';
-import MonthlyNote from './MonthlyNote';
-import type Note from './Note';
-import QuarterlyNote from './QuarterlyNote';
-import WeeklyNote from './WeeklyNote';
-import YearlyNote from './YearlyNote';
+import { Notice, type TFile, type WorkspaceLeaf } from 'obsidian';
+import { IPeriodicitySettings, ISettings } from 'src/settings';
+import { ObsidianWorkspace } from 'src/types';
+import Note from '.';
+import DailyNote from './daily-note';
+import MonthlyNote from './monthly-note';
+import QuarterlyNote from './quarterly-note';
+import WeeklyNote from './weekly-note';
+import YearlyNote from './yearly-note';
 
-
-export class NoteManager {
+export class NotesProvider {
   private workspace: ObsidianWorkspace;
 
   constructor(workspace: ObsidianWorkspace) {
@@ -33,6 +32,23 @@ export class NoteManager {
           `Today's ${term} note has been created.`,
           5000
         );
+
+        if (setting.closeExisting) {
+          const existingNotes = cls.getAllPaths();
+          const toDetach: WorkspaceLeaf[] = [];
+          this.workspace.iterateRootLeaves((leaf) => {
+            if (leaf.view.getState() && typeof leaf.view.getState().file !== 'undefined' && existingNotes.indexOf(leaf.view.getState().file) > -1) {
+              toDetach.push(leaf);
+            }
+          });
+
+          for (const leaf of toDetach) {
+            leaf.detach();
+          }
+
+          // Ensure that it waits a second for the new tab to have been created if ALL existing leaves have been detached
+          await Promise.all([setTimeout(() => {}, 1000)]);
+        }
 
         if (setting.openAndPin) {
           await this.workspace.getLeaf(true).openFile(newNote);
