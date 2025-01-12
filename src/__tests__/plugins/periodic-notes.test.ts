@@ -1,6 +1,6 @@
-import type { ObsidianAppWithPlugins } from '../types';
-import { PeriodicNotes, PERIODIC_NOTES_NAME, type IPeriodicNotesPlugin, type IPeriodicNotesSettings } from '../periodic-notes';
-import { applyDefaultSettings, type ISettings } from '../settings';
+import type { ObsidianAppWithPlugins } from '../../types';
+import { PeriodicNotesPluginAdapter, PLUGIN_NAME, type IPeriodicNotesPlugin, type IPeriodicNotesSettings } from '../../plugins/periodic-notes';
+import { applyDefaultSettings, type ISettings } from '../../settings';
 import type { Plugin } from 'obsidian';
 
 describe('PeriodicNotes', () => {
@@ -16,15 +16,15 @@ describe('PeriodicNotes', () => {
   });
 
   it('returns true when plugin is enabled', () => {
-    app.plugins.enabledPlugins.add(PERIODIC_NOTES_NAME);
+    app.plugins.enabledPlugins.add(PLUGIN_NAME);
 
-    const sut = new PeriodicNotes(app);
-    expect(sut.isPeriodicNotesPluginEnabled()).toEqual(true);
+    const sut = new PeriodicNotesPluginAdapter(app);
+    expect(sut.isEnabled()).toEqual(true);
   });
 
   it('returns false when plugin is unavailable', () => {
-    const sut = new PeriodicNotes(app);
-    expect(sut.isPeriodicNotesPluginEnabled()).toEqual(false);
+    const sut = new PeriodicNotesPluginAdapter(app);
+    expect(sut.isEnabled()).toEqual(false);
   });
 
   it('returns the plugin settings', () => {
@@ -41,8 +41,8 @@ describe('PeriodicNotes', () => {
       return mockPlugin;
     }
 
-    const sut = new PeriodicNotes(app);
-    const result = sut.getPeriodicNotesSettings();
+    const sut = new PeriodicNotesPluginAdapter(app);
+    const result = sut.getSettings();
     expect(result.daily.enabled).toEqual(true);
     expect(result.weekly.enabled).toEqual(false);
   });
@@ -53,8 +53,8 @@ describe('PeriodicNotes', () => {
       return mockPlugin;
     }
 
-    const sut = new PeriodicNotes(app);
-    const result = sut.getPeriodicNotesSettings();
+    const sut = new PeriodicNotesPluginAdapter(app);
+    const result = sut.getSettings();
     expect(result).toEqual({});
   });
 
@@ -67,9 +67,9 @@ describe('PeriodicNotes', () => {
       yearly: { enabled: false },
     };
 
-    const sut = new PeriodicNotes(app);
+    const sut = new PeriodicNotesPluginAdapter(app);
     const settings = applyDefaultSettings({} as ISettings);
-    const result = sut.convertPeriodicNotesSettings(settings, mockSettings);
+    const result = sut.convertSettings(settings, mockSettings);
 
     expect(result.daily.available).toEqual(true);
     expect(result.weekly.available).toEqual(false);

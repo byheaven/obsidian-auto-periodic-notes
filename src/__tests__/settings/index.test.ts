@@ -1,4 +1,4 @@
-import { applyDefaultSettings, type ISettings } from '../settings';
+import { applyDefaultSettings, type ISettings } from '../../settings';
 
 describe('settings', () => {
 
@@ -9,6 +9,7 @@ describe('settings', () => {
 
     expect(result.daily.available).toEqual(false);
     expect(result.daily.enabled).toEqual(false);
+    expect(result.daily.closeExisting).toEqual(false);
     expect(result.daily.openAndPin).toEqual(false);
   });
 
@@ -17,6 +18,7 @@ describe('settings', () => {
       daily: {
         available: true,
         enabled: true,
+        closeExisting: true,
         openAndPin: true
       }
     } as ISettings;
@@ -25,6 +27,7 @@ describe('settings', () => {
 
     expect(result.daily.available).toEqual(true);
     expect(result.daily.enabled).toEqual(true);
+    expect(result.daily.closeExisting).toEqual(true);
     expect(result.daily.openAndPin).toEqual(true);
   });
 

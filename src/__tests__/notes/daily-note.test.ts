@@ -1,6 +1,6 @@
 import { TFile } from 'obsidian';
 import * as dailyNotesInterface from 'obsidian-daily-notes-interface';
-import DailyNote from '../../notes/DailyNote';
+import DailyNote from '../../notes/daily-note';
 
 jest.mock('obsidian');
 jest.mock('obsidian-daily-notes-interface');
@@ -12,13 +12,28 @@ describe('Daily Note', () => {
   beforeEach(() => {
     const emptyRecord: Record<string, TFile> = {};
     mockGetAllNotes = dailyNotesInterface.getAllDailyNotes as jest.MockedFunction<typeof dailyNotesInterface.getAllDailyNotes>;
-    mockGetAllNotes.mockImplementation(() => {
-      return emptyRecord;
-    });
+    mockGetAllNotes.mockReturnValue(emptyRecord);
   });
 
   afterEach(() => {
     mockGetAllNotes.mockReset();
+  });
+
+  it('gets the paths of all notes', () => {
+    const files: Record<string, TFile> = {
+      example1: new TFile(),
+      example2: new TFile(),
+    };
+    files.example1.path = 'example/example-1.md';
+    files.example2.path = 'example/example-2.md';
+    mockGetAllNotes.mockReturnValue(files);
+
+    const sut = new DailyNote();
+    const result = sut.getAllPaths();
+
+    expect(result.length).toEqual(2);
+    expect(result[0]).toEqual('example/example-1.md');
+    expect(result[1]).toEqual('example/example-2.md');
   });
   
   it('returns if present', () => {

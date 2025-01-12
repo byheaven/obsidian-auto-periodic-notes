@@ -1,58 +1,70 @@
-import { Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
-import DailyNote from '../../notes/DailyNote';
-import MonthlyNote from '../../notes/MonthlyNote';
-import { NoteManager } from '../../notes/NoteManager';
-import QuarterlyNote from '../../notes/QuarterlyNote';
-import WeeklyNote from '../../notes/WeeklyNote';
-import YearlyNote from '../../notes/YearlyNote';
+import { MarkdownView, Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
+import DailyNote from '../../notes/daily-note';
+import MonthlyNote from '../../notes/monthly-note';
+import { NotesProvider } from '../../notes/provider';
+import QuarterlyNote from '../../notes/quarterly-note';
+import WeeklyNote from '../../notes/weekly-note';
+import YearlyNote from '../../notes/yearly-note';
 import type { ISettings } from '../../settings';
-import type { ObsidianWorkspace } from '../../types';
 
 jest.mock('obsidian');
-jest.mock('../../notes/DailyNote');
-jest.mock('../../notes/WeeklyNote');
-jest.mock('../../notes/MonthlyNote');
-jest.mock('../../notes/QuarterlyNote');
-jest.mock('../../notes/YearlyNote');
+jest.mock('../../notes/daily-note');
+jest.mock('../../notes/weekly-note');
+jest.mock('../../notes/monthly-note');
+jest.mock('../../notes/quarterly-note');
+jest.mock('../../notes/yearly-note');
 
-describe('Note Manager', () => {
+describe('Notes Provider', () => {
 
-  it('does not create notes when nothing is available', async () => {
-    const settings: ISettings = {
+  let settings: ISettings;
+  
+  beforeEach(() => {
+    settings = {
       daily: {
         available: false,
         enabled: false,
+        closeExisting: false,
         openAndPin: false,
       },
       weekly: {
         available: false,
         enabled: false,
+        closeExisting: false,
         openAndPin: false,
       },
       monthly: {
         available: false,
         enabled: false,
+        closeExisting: false,
         openAndPin: false,
       },
       quarterly: {
         available: false,
         enabled: false,
+        closeExisting: false,
         openAndPin: false,
       },
       yearly: {
         available: false,
         enabled: false,
+        closeExisting: false,
         openAndPin: false,
       },
     };
+  });
 
+  afterEach(() => {
+    jest.resetAllMocks();
+  })
+
+  it('does not create notes when nothing is available', async () => {
     const spyYearlyIsPresent = jest.spyOn(YearlyNote.prototype, 'isPresent');
     const spyQuarterlyIsPresent = jest.spyOn(QuarterlyNote.prototype, 'isPresent');
     const spyMonthlyIsPresent = jest.spyOn(MonthlyNote.prototype, 'isPresent');
     const spyWeeklyIsPresent = jest.spyOn(WeeklyNote.prototype, 'isPresent');
     const spyDailyIsPresent = jest.spyOn(DailyNote.prototype, 'isPresent');
 
-    const sut = new NoteManager({} as ObsidianWorkspace);
+    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(YearlyNote).toHaveBeenCalled();
@@ -65,42 +77,10 @@ describe('Note Manager', () => {
     expect(spyMonthlyIsPresent).not.toHaveBeenCalled();
     expect(spyWeeklyIsPresent).not.toHaveBeenCalled();
     expect(spyDailyIsPresent).not.toHaveBeenCalled();
-
-    spyYearlyIsPresent.mockReset();
-    spyQuarterlyIsPresent.mockReset();
-    spyMonthlyIsPresent.mockReset();
-    spyWeeklyIsPresent.mockReset();
-    spyDailyIsPresent.mockReset();
   });
 
   it('does not create notes when nothing is enabled', async () => {
-    const settings: ISettings = {
-      daily: {
-        available: true,
-        enabled: false,
-        openAndPin: false,
-      },
-      weekly: {
-        available: true,
-        enabled: false,
-        openAndPin: false,
-      },
-      monthly: {
-        available: true,
-        enabled: false,
-        openAndPin: false,
-      },
-      quarterly: {
-        available: true,
-        enabled: false,
-        openAndPin: false,
-      },
-      yearly: {
-        available: true,
-        enabled: false,
-        openAndPin: false,
-      },
-    };
+    settings.daily.available = true;
 
     const spyYearlyIsPresent = jest.spyOn(YearlyNote.prototype, 'isPresent');
     const spyQuarterlyIsPresent = jest.spyOn(QuarterlyNote.prototype, 'isPresent');
@@ -108,7 +88,7 @@ describe('Note Manager', () => {
     const spyWeeklyIsPresent = jest.spyOn(WeeklyNote.prototype, 'isPresent');
     const spyDailyIsPresent = jest.spyOn(DailyNote.prototype, 'isPresent');
 
-    const sut = new NoteManager({} as ObsidianWorkspace);
+    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(YearlyNote).toHaveBeenCalled();
@@ -121,132 +101,110 @@ describe('Note Manager', () => {
     expect(spyMonthlyIsPresent).not.toHaveBeenCalled();
     expect(spyWeeklyIsPresent).not.toHaveBeenCalled();
     expect(spyDailyIsPresent).not.toHaveBeenCalled();
-
-    spyYearlyIsPresent.mockReset();
-    spyQuarterlyIsPresent.mockReset();
-    spyMonthlyIsPresent.mockReset();
-    spyWeeklyIsPresent.mockReset();
-    spyDailyIsPresent.mockReset();
   });
 
   it('does not create notes when they already exist', async () => {
-    const settings: ISettings = {
-      daily: {
-        available: true,
-        enabled: true,
-        openAndPin: false,
-      },
-      weekly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      monthly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      quarterly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      yearly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-    };
+    settings.daily.available = true;
+    settings.daily.enabled = true;
 
     const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
     mockDailyIsPresent.mockImplementation(() => true);
     const spyDailyCreate = jest.spyOn(DailyNote.prototype, 'create');
 
-    const sut = new NoteManager({} as ObsidianWorkspace);
+    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyIsPresent).toHaveBeenCalled();
     expect(spyDailyCreate).not.toHaveBeenCalled();
-
-    mockDailyIsPresent.mockReset();
-    spyDailyCreate.mockReset();
   });
 
   it('creates notes when missing', async () => {
-    const settings: ISettings = {
-      daily: {
-        available: true,
-        enabled: true,
-        openAndPin: false,
-      },
-      weekly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      monthly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      quarterly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      yearly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-    };
+    settings.daily.available = true;
+    settings.daily.enabled = true;
 
     const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
     mockDailyIsPresent.mockImplementation(() => false);
     const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
     mockDailyCreate.mockImplementation(() => Promise.resolve(new TFile()));
 
-    const sut = new NoteManager({} as ObsidianWorkspace);
+    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyIsPresent).toHaveBeenCalled();
     expect(mockDailyCreate).toHaveBeenCalled();
     expect(Notice).toHaveBeenCalledWith(`Today's daily note has been created.`, 5000);
+  });
 
-    mockDailyIsPresent.mockReset();
-    mockDailyCreate.mockReset();
+  it('closes existing notes, but does nothing when none are found', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.closeExisting = true;
+
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(new TFile()));
+    const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
+    mockDailyGetAllPaths.mockReturnValue([]);
+    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    mockIterateRootLeaves.mockImplementation((cb) => {
+      [].map(cb);
+    });
+
+    const sut = new NotesProvider(new Workspace());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyGetAllPaths).toHaveBeenCalled();
+    expect(mockIterateRootLeaves).toHaveBeenCalled();
+  });
+
+  it('closes existing notes, only closing those that are matched', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.closeExisting = true;
+
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(new TFile()));
+    const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
+    mockDailyGetAllPaths.mockReturnValue(['daily/2025-01-01.md']);
+    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockWorkspaceLeafDetach = WorkspaceLeaf.prototype.detach as jest.MockedFunction<typeof WorkspaceLeaf.prototype.detach>;
+    const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
+    mockViewGetState.mockReturnValueOnce(undefined)
+      .mockReturnValueOnce({})
+      .mockReturnValueOnce({file: 'not-a-daily-file.md'})
+      .mockReturnValueOnce({file: 'daily/2025-01-01.md'});
+    const leaves: WorkspaceLeaf[] = [];
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves[0].view = new MarkdownView(leaves[0]);
+    leaves[1].view = new MarkdownView(leaves[1]);
+    leaves[2].view = new MarkdownView(leaves[2]);
+    leaves[3].view = new MarkdownView(leaves[3]);
+    mockIterateRootLeaves.mockImplementation((cb) => {
+      leaves.map(cb);
+    });
+
+    const sut = new NotesProvider(new Workspace());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyGetAllPaths).toHaveBeenCalled();
+    expect(mockIterateRootLeaves).toHaveBeenCalled();
+    expect(mockWorkspaceLeafDetach).toHaveBeenCalledTimes(1);
   });
 
   it('pins new notes but ignores when most recent leaf call fails', async () => {
-    const settings: ISettings = {
-      daily: {
-        available: true,
-        enabled: true,
-        openAndPin: true,
-      },
-      weekly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      monthly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      quarterly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      yearly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-    };
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.openAndPin = true;
 
     const expectedFile = new TFile();
     const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
@@ -262,7 +220,7 @@ describe('Note Manager', () => {
     const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
     mockGetMostRecentLeaf.mockImplementation(() => null);
 
-    const sut = new NoteManager(new Workspace());
+    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -270,43 +228,12 @@ describe('Note Manager', () => {
     expect(mockDailyCreate).toHaveBeenCalled();
     expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
     expect(mockSetPinned).not.toHaveBeenCalled();
-
-    mockDailyIsPresent.mockReset();
-    mockDailyCreate.mockReset();
-    mockOpenFile.mockReset();
-    mockSetPinned.mockReset();
-    mockGetLeaf.mockReset();
-    mockGetMostRecentLeaf.mockReset();
   });
 
   it('pins new notes when enabled', async () => {
-    const settings: ISettings = {
-      daily: {
-        available: true,
-        enabled: true,
-        openAndPin: true,
-      },
-      weekly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      monthly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      quarterly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-      yearly: {
-        available: false,
-        enabled: false,
-        openAndPin: false,
-      },
-    };
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.openAndPin = true;
 
     const expectedFile = new TFile();
     const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
@@ -322,7 +249,7 @@ describe('Note Manager', () => {
     const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
     mockGetMostRecentLeaf.mockImplementation(() => new WorkspaceLeaf());
 
-    const sut = new NoteManager(new Workspace());
+    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -330,13 +257,6 @@ describe('Note Manager', () => {
     expect(mockDailyCreate).toHaveBeenCalled();
     expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
     expect(mockSetPinned).toHaveBeenCalled();
-
-    mockDailyIsPresent.mockReset();
-    mockDailyCreate.mockReset();
-    mockOpenFile.mockReset();
-    mockSetPinned.mockReset();
-    mockGetLeaf.mockReset();
-    mockGetMostRecentLeaf.mockReset();
   });
   
 });

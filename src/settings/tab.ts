@@ -1,48 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import AutoPeriodicNotes from 'src';
-
-export type IPeriodicity =
-  | 'daily'
-  | 'weekly'
-  | 'monthly'
-  | 'quarterly'
-  | 'yearly';
-
-export interface IPeriodicitySettings {
-  available: boolean;
-  enabled: boolean;
-  openAndPin: boolean;
-}
-
-export interface ISettings {
-  daily: IPeriodicitySettings;
-  weekly: IPeriodicitySettings;
-  monthly: IPeriodicitySettings;
-  quarterly: IPeriodicitySettings;
-  yearly: IPeriodicitySettings;
-}
-
-export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze({
-  available: false,
-  enabled: false,
-  openAndPin: false,
-});
-
-export const DEFAULT_SETTINGS: ISettings = Object.freeze({
-  daily: { ...DEFAULT_PERIODICITY_SETTINGS },
-  weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
-  monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
-  quarterly: { ...DEFAULT_PERIODICITY_SETTINGS },
-  yearly: { ...DEFAULT_PERIODICITY_SETTINGS },
-});
-
-export function applyDefaultSettings(savedSettings: ISettings): ISettings {
-  return Object.assign(
-    {},
-    DEFAULT_SETTINGS,
-    savedSettings
-  );
-}
+import { IPeriodicity, ISettings } from '.';
+import AutoPeriodicNotes from '..';
 
 export class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
   public plugin: AutoPeriodicNotes;
@@ -95,6 +53,17 @@ export class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
               .setValue(settings[periodicity].openAndPin)
               .onChange(async (val) => {
                 settings[periodicity].openAndPin = val;
+                await this.plugin.updateSettings(settings);
+              });
+          });
+        new Setting(this.containerEl)
+          .setName(`Close older ${periodicity} notes`)
+          .setDesc(`When creating new notes, automatically close any older and open ${periodicity} notes.`)
+          .addToggle((toggle) => {
+            toggle
+              .setValue(settings[periodicity].closeExisting)
+              .onChange(async (val) => {
+                settings[periodicity].closeExisting = val;
                 await this.plugin.updateSettings(settings);
               });
           });
