@@ -1,5 +1,5 @@
-import { Notice, type TFile, type WorkspaceLeaf } from 'obsidian';
-import { IPeriodicitySettings, ISettings } from 'src/settings';
+import { moment, Notice, type TFile, type WorkspaceLeaf } from 'obsidian';
+import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import Note from '.';
 import DailyNote from './daily-note';
@@ -26,6 +26,13 @@ export class NotesProvider {
   private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string): Promise<void> {
     if (setting.available && setting.enabled) {
       if (!cls.isPresent()) {
+
+        if (term === 'daily' && (setting as IDailySettings).excludeWeekends) {
+          const today = moment();
+          if (today.format('dd') === 'Sa' || today.format('dd') === 'Su') {
+            return;
+          }
+        }
 
         const newNote: TFile = await cls.create();
         new Notice(

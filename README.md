@@ -15,6 +15,8 @@ This plugin respects the settings of the Periodic Notes plugin, creating your no
 - Creates new notes in the background for your periodic notes
 - Supports daily, weekly, monthly, quarterly and yearly notes with individual settings for each
 - Supports opening and pinning the new notes automatically when created
+- Supports automatically closing older notes
+- Can exclude weekends from daily note generation
 
 ## Settings
 

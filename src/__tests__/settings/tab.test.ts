@@ -62,7 +62,22 @@ describe('settings tab', () => {
     expect(setNameSpy).toHaveBeenCalledWith('Enable automatic daily notes');
     expect(setNameSpy).toHaveBeenCalledWith('Open and pin new daily notes');
     expect(setNameSpy).toHaveBeenCalledWith('Close older daily notes');
+    expect(setNameSpy).toHaveBeenCalledWith('Exclude weekends');
     expect(setNameSpy).not.toHaveBeenCalledWith('Enable automatic weekly notes');
+  });
+
+  it('displays settings for weekly periodicity', () => {
+    plugin.settings.daily.available = false;
+    plugin.settings.weekly.available = true;
+    const setNameSpy = jest.spyOn(Setting.prototype, 'setName');
+
+    sut.display();
+
+    expect(setNameSpy).toHaveBeenCalledWith('Enable automatic weekly notes');
+    expect(setNameSpy).toHaveBeenCalledWith('Open and pin new weekly notes');
+    expect(setNameSpy).toHaveBeenCalledWith('Close older weekly notes');
+    expect(setNameSpy).not.toHaveBeenCalledWith('Exclude weekends');
+    expect(setNameSpy).not.toHaveBeenCalledWith('Enable automatic monthly notes');
   });
 
   it('displays settings for all periodicities', () => {

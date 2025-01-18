@@ -45,6 +45,21 @@ export class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
                 await this.plugin.updateSettings(settings);
               });
           });
+          
+        if (periodicity === 'daily') {
+          new Setting(this.containerEl)
+            .setName(`Exclude weekends`)
+            .setDesc('Only create new daily notes Monday - Friday, excluding Saturdays and Sundays.')
+            .addToggle((toggle) => {
+              toggle
+                .setValue(settings[periodicity].excludeWeekends)
+                .onChange(async (val) => {
+                  settings[periodicity].excludeWeekends = val;
+                  await this.plugin.updateSettings(settings);
+                });
+            });
+        }
+
         new Setting(this.containerEl)
           .setName(`Open and pin new ${periodicity} notes`)
           .setDesc('When enabled, whether to automatically open the new note and pin it to your tabs.')
@@ -56,6 +71,7 @@ export class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
                 await this.plugin.updateSettings(settings);
               });
           });
+        
         new Setting(this.containerEl)
           .setName(`Close older ${periodicity} notes`)
           .setDesc(`When creating new notes, automatically close any older and open ${periodicity} notes.`)
