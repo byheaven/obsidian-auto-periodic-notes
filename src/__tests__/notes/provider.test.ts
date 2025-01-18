@@ -25,6 +25,7 @@ describe('Notes Provider', () => {
         enabled: false,
         closeExisting: false,
         openAndPin: false,
+        excludeWeekends: false,
       },
       weekly: {
         available: false,
@@ -110,6 +111,46 @@ describe('Notes Provider', () => {
     const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
     mockDailyIsPresent.mockImplementation(() => true);
     const spyDailyCreate = jest.spyOn(DailyNote.prototype, 'create');
+
+    const sut = new NotesProvider(new Workspace());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyIsPresent).toHaveBeenCalled();
+    expect(spyDailyCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not create daily notes when it is a Saturday', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.excludeWeekends = true;
+
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const spyDailyCreate = jest.spyOn(DailyNote.prototype, 'create');
+    
+    // Mock Date so moment's logic is untouched
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-18T12:00:00Z').getTime());
+
+    const sut = new NotesProvider(new Workspace());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyIsPresent).toHaveBeenCalled();
+    expect(spyDailyCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not create daily notes when it is a Sunday', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.excludeWeekends = true;
+
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const spyDailyCreate = jest.spyOn(DailyNote.prototype, 'create');
+    
+    // Mock Date so moment's logic is untouched
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-19T12:00:00Z').getTime());
 
     const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);

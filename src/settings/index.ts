@@ -12,8 +12,12 @@ export interface IPeriodicitySettings {
   openAndPin: boolean;
 }
 
+export interface IDailySettings extends IPeriodicitySettings {
+  excludeWeekends: boolean;
+}
+
 export interface ISettings {
-  daily: IPeriodicitySettings;
+  daily: IDailySettings;
   weekly: IPeriodicitySettings;
   monthly: IPeriodicitySettings;
   quarterly: IPeriodicitySettings;
@@ -28,7 +32,7 @@ export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze(
 });
 
 export const DEFAULT_SETTINGS: ISettings = Object.freeze({
-  daily: { ...DEFAULT_PERIODICITY_SETTINGS },
+  daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false, },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
   quarterly: { ...DEFAULT_PERIODICITY_SETTINGS },
