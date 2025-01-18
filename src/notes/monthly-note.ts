@@ -27,4 +27,8 @@ export default class MonthlyNote extends Note {
     const start: Moment = this.date.clone().startOf(UNIT);
     return createMonthlyNote(start);
   }
+  
+  getCurrent(): TFile {
+    return getMonthlyNote(this.date, getAllMonthlyNotes());
+  }
 }

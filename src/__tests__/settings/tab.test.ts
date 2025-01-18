@@ -53,6 +53,14 @@ describe('settings tab', () => {
     expect(setNameSpy).not.toHaveBeenCalledWith('No periodic notes enabled');
   });
 
+  it('displays the always open setting', () => {
+    const setNameSpy = jest.spyOn(Setting.prototype, 'setName');
+
+    sut.display();
+
+    expect(setNameSpy).toHaveBeenCalledWith('Always open periodic notes');
+  });
+
   it('displays settings for daily periodicity', () => {
     plugin.settings.daily.available = true;
     const setNameSpy = jest.spyOn(Setting.prototype, 'setName');

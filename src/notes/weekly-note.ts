@@ -27,4 +27,8 @@ export default class WeeklyNote extends Note {
     const start: Moment = this.date.clone().startOf(UNIT);
     return createWeeklyNote(start);
   }
+  
+  getCurrent(): TFile {
+    return getWeeklyNote(this.date, getAllWeeklyNotes());
+  }
 }

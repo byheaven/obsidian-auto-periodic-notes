@@ -4,4 +4,5 @@ export default abstract class Note {
   abstract getAllPaths(): string[];
   abstract isPresent(): boolean;
   abstract create(): Promise<TFile>;
+  abstract getCurrent(): TFile;
 }

@@ -27,4 +27,8 @@ export default class QuarterlyNote extends Note {
     const start: Moment = this.date.clone().startOf(UNIT);
     return createQuarterlyNote(start);
   }
+  
+  getCurrent(): TFile {
+    return getQuarterlyNote(this.date, getAllQuarterlyNotes());
+  }
 }
