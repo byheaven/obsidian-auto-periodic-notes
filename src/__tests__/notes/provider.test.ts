@@ -20,6 +20,7 @@ describe('Notes Provider', () => {
   
   beforeEach(() => {
     settings = {
+      alwaysOpen: false,
       daily: {
         available: false,
         enabled: false,
@@ -202,6 +203,48 @@ describe('Notes Provider', () => {
     expect(mockIterateRootLeaves).toHaveBeenCalled();
   });
 
+  it('does not close existing notes when the new note is already open', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.closeExisting = true;
+
+    const newFile: TFile = new TFile();
+    newFile.path = 'daily/2025-01-18.md';
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(newFile));
+    const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
+    mockDailyGetAllPaths.mockReturnValue(['daily/2025-01-01.md', newFile.path]);
+    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockWorkspaceLeafDetach = WorkspaceLeaf.prototype.detach as jest.MockedFunction<typeof WorkspaceLeaf.prototype.detach>;
+    const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
+    mockViewGetState.mockReturnValueOnce(undefined)
+      .mockReturnValueOnce({})
+      .mockReturnValueOnce({file: 'daily/2025-01-01.md'})
+      .mockReturnValueOnce({file: newFile.path});
+    const leaves: WorkspaceLeaf[] = [];
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves[0].view = new MarkdownView(leaves[0]);
+    leaves[1].view = new MarkdownView(leaves[1]);
+    leaves[2].view = new MarkdownView(leaves[2]);
+    leaves[3].view = new MarkdownView(leaves[3]);
+    mockIterateRootLeaves.mockImplementation((cb) => {
+      leaves.map(cb);
+    });
+
+    const sut = new NotesProvider(new Workspace());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyGetAllPaths).toHaveBeenCalled();
+    expect(mockIterateRootLeaves).toHaveBeenCalled();
+    expect(mockWorkspaceLeafDetach).not.toHaveBeenCalled();
+  });
+
   it('closes existing notes, only closing those that are matched', async () => {
     settings.daily.available = true;
     settings.daily.enabled = true;
@@ -240,6 +283,54 @@ describe('Notes Provider', () => {
     expect(mockDailyGetAllPaths).toHaveBeenCalled();
     expect(mockIterateRootLeaves).toHaveBeenCalled();
     expect(mockWorkspaceLeafDetach).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not pin new notes when the new note is already open', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.openAndPin = true;
+
+    const expectedFile = new TFile();
+    expectedFile.path = 'daily/2025-01-18.md';
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(expectedFile));
+    const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+    mockOpenFile.mockImplementation(() => Promise.resolve());
+    const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+    mockSetPinned.mockImplementation(() => {});
+    const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+    mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+    const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
+    mockGetMostRecentLeaf.mockImplementation(() => null);
+    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
+    mockViewGetState.mockReturnValueOnce(undefined)
+      .mockReturnValueOnce({})
+      .mockReturnValueOnce({file: 'daily/2025-01-01.md'})
+      .mockReturnValueOnce({file: expectedFile.path});
+    const leaves: WorkspaceLeaf[] = [];
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves[0].view = new MarkdownView(leaves[0]);
+    leaves[1].view = new MarkdownView(leaves[1]);
+    leaves[2].view = new MarkdownView(leaves[2]);
+    leaves[3].view = new MarkdownView(leaves[3]);
+    mockIterateRootLeaves.mockImplementation((cb) => {
+      leaves.map(cb);
+    });
+
+    const sut = new NotesProvider(new Workspace());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyIsPresent).toHaveBeenCalled();
+    expect(mockDailyCreate).toHaveBeenCalled();
+    expect(mockOpenFile).not.toHaveBeenCalledWith(expectedFile);
+    expect(mockSetPinned).not.toHaveBeenCalled();
   });
 
   it('pins new notes but ignores when most recent leaf call fails', async () => {
@@ -296,6 +387,59 @@ describe('Notes Provider', () => {
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyIsPresent).toHaveBeenCalled();
     expect(mockDailyCreate).toHaveBeenCalled();
+    expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
+    expect(mockSetPinned).toHaveBeenCalled();
+  });
+
+  it('closes open files and pins new ones even when not creating', async () => {
+    settings.alwaysOpen = true;
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.closeExisting = true;
+    settings.daily.openAndPin = true;
+
+    const expectedFile = new TFile();
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => true);
+    const mockGetCurrent = DailyNote.prototype.getCurrent as jest.MockedFunction<typeof DailyNote.prototype.getCurrent>;
+    mockGetCurrent.mockImplementation(() => expectedFile);
+    const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
+    mockDailyGetAllPaths.mockReturnValue(['daily/2025-01-01.md']);
+    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockWorkspaceLeafDetach = WorkspaceLeaf.prototype.detach as jest.MockedFunction<typeof WorkspaceLeaf.prototype.detach>;
+    const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
+    mockViewGetState.mockReturnValueOnce(undefined)
+      .mockReturnValueOnce({})
+      .mockReturnValueOnce({file: 'not-a-daily-file.md'})
+      .mockReturnValueOnce({file: 'daily/2025-01-01.md'});
+    const leaves: WorkspaceLeaf[] = [];
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves.push(new WorkspaceLeaf());
+    leaves[0].view = new MarkdownView(leaves[0]);
+    leaves[1].view = new MarkdownView(leaves[1]);
+    leaves[2].view = new MarkdownView(leaves[2]);
+    leaves[3].view = new MarkdownView(leaves[3]);
+    mockIterateRootLeaves.mockImplementation((cb) => {
+      leaves.map(cb);
+    });
+    const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+    mockOpenFile.mockImplementation(() => Promise.resolve());
+    const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+    mockSetPinned.mockImplementation(() => {});
+    const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+    mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+    const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
+    mockGetMostRecentLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+    const sut = new NotesProvider(new Workspace());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyGetAllPaths).toHaveBeenCalled();
+    expect(mockIterateRootLeaves).toHaveBeenCalled();
+    expect(mockWorkspaceLeafDetach).toHaveBeenCalledTimes(1);
     expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
     expect(mockSetPinned).toHaveBeenCalled();
   });

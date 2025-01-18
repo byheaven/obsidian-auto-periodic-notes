@@ -27,4 +27,8 @@ export default class DailyNote extends Note {
     const start: Moment = this.date.clone().startOf(UNIT);
     return createDailyNote(start);
   }
+
+  getCurrent(): TFile {
+    return getDailyNote(this.date, getAllDailyNotes());
+  }
 }

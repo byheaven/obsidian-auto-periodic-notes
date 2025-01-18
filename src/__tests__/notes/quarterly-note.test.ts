@@ -1,4 +1,4 @@
-import { TFile } from 'obsidian';
+import { moment, TFile } from 'obsidian';
 import * as dailyNotesInterface from 'obsidian-daily-notes-interface';
 import QuarterlyNote from '../../notes/quarterly-note';
 
@@ -65,6 +65,21 @@ describe('Quarterly Note', () => {
     expect(result.basename).toEqual('example');
 
     mock.mockReset();
+  });
+
+  it('returns current note', () => {
+    const mock = dailyNotesInterface.getQuarterlyNote as jest.MockedFunction<typeof dailyNotesInterface.getQuarterlyNote>;
+    const fileName = moment().format('YYYY-MM-DD');
+    mock.mockImplementation(() => {
+      const file = new TFile();
+      file.basename = fileName;
+      return file;
+    });
+
+    const sut = new QuarterlyNote();
+    const result = sut.getCurrent();
+    
+    expect(result.basename).toEqual(fileName);
   });
 
 });

@@ -31,6 +31,19 @@ export class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
         .setDesc('No periodic notes settings are enabled. You must turn on one of daily, weekly, monthly, quarterly or yearly notes within the Periodic Notes plugin settings to be able to configure them to generate automatically.');
     }
 
+    this.containerEl.createEl('h3', { text: `All periodic notes` });
+    new Setting(this.containerEl)
+      .setName('Always open periodic notes')
+      .setDesc('When opening Obsidian or checking notes, always open your periodic notes even when they haven\'t just been created. This can be useful for maintaining a consistent workspace with pinned notes each time you start your day.')
+      .addToggle((toggle) => {
+        toggle
+          .setValue(settings.alwaysOpen)
+          .onChange(async (val) => {
+            settings.alwaysOpen = val;
+            await this.plugin.updateSettings(settings);
+          });
+      });
+
     for (const periodicity of periodicities) {
       if (settings[periodicity].available) {
         this.containerEl.createEl('h3', { text: `Automatic ${periodicity} notes` });

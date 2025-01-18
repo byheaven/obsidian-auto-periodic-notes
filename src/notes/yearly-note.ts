@@ -27,4 +27,8 @@ export default class YearlyNote extends Note {
     const start: Moment = this.date.clone().startOf(UNIT);
     return createYearlyNote(start);
   }
+  
+  getCurrent(): TFile {
+    return getYearlyNote(this.date, getAllYearlyNotes());
+  }
 }
