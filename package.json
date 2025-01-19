@@ -14,6 +14,9 @@
   "keywords": [],
   "author": "Jamie Hurst <jamie@jamiehurst.co.uk>",
   "license": "MIT",
+  "dependencies": {
+    "obsidian-daily-notes-interface": "^0.9.4"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^22.0.0",
@@ -26,7 +29,6 @@
     "jest-junit": "^16.0.0",
     "moment": "^2.30.1",
     "obsidian": "^1.6.6",
-    "obsidian-daily-notes-interface": "^0.9.4",
     "ts-jest": "^29.2.4",
     "tslib": "^2.6.3",
     "typescript": "^5.5.4"

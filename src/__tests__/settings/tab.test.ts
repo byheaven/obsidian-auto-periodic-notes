@@ -1,7 +1,7 @@
 import { App, Setting } from 'obsidian';
 import AutoTasks from '../..';
 import { DEFAULT_SETTINGS } from '../../settings';
-import { AutoPeriodicNotesSettingsTab } from '../../settings/tab';
+import AutoPeriodicNotesSettingsTab from '../../settings/tab';
 
 describe('settings tab', () => {
 
