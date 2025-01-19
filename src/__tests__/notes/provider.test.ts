@@ -1,7 +1,7 @@
 import { MarkdownView, Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
 import DailyNote from '../../notes/daily-note';
 import MonthlyNote from '../../notes/monthly-note';
-import { NotesProvider } from '../../notes/provider';
+import NotesProvider from '../../notes/provider';
 import QuarterlyNote from '../../notes/quarterly-note';
 import WeeklyNote from '../../notes/weekly-note';
 import YearlyNote from '../../notes/yearly-note';

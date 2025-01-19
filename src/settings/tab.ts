@@ -2,7 +2,7 @@ import { App, PluginSettingTab, Setting } from 'obsidian';
 import { IPeriodicity, ISettings } from '.';
 import AutoPeriodicNotes from '..';
 
-export class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
+export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
   public plugin: AutoPeriodicNotes;
 
   constructor(app: App, plugin: AutoPeriodicNotes) {

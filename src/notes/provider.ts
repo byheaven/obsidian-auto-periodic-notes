@@ -7,8 +7,9 @@ import MonthlyNote from './monthly-note';
 import QuarterlyNote from './quarterly-note';
 import WeeklyNote from './weekly-note';
 import YearlyNote from './yearly-note';
+import debug from '../log';
 
-export class NotesProvider {
+export default class NotesProvider {
   private workspace: ObsidianWorkspace;
   private workspaceLeaves: Record<string, WorkspaceLeaf>;
 
@@ -17,6 +18,7 @@ export class NotesProvider {
   }
 
   async checkAndCreateNotes(settings: ISettings): Promise<void> {
+    debug('Checking if any new notes need to be created');
     this.workspaceLeaves = {};
 
     await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen);
@@ -29,15 +31,18 @@ export class NotesProvider {
   private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean): Promise<void> {
     if (setting.available && setting.enabled) {
       
+      debug(`Checking if ${term} note needs to be created`);
       if (!cls.isPresent()) {
 
         if (term === 'daily' && (setting as IDailySettings).excludeWeekends) {
           const today = moment();
           if (today.format('dd') === 'Sa' || today.format('dd') === 'Su') {
+            debug('Not creating new note as it is a weekend');
             return;
           }
         }
 
+        debug(`Creating new ${term} note`);
         const newNote: TFile = await cls.create();
         new Notice(
           `Today's ${term} note has been created.`,
@@ -49,6 +54,7 @@ export class NotesProvider {
 
       } else if (alwaysOpen) {
 
+        debug(`Set to always open notes, getting current ${term} note and checking if it needs to be opened`);
         const existingNote: TFile = cls.getCurrent();
 
         await this.handleClose(setting, cls, existingNote);
@@ -73,6 +79,7 @@ export class NotesProvider {
 
   private async handleClose(setting: IPeriodicitySettings, cls: Note, newNote: TFile): Promise<void> {
     if (setting.closeExisting) {
+      debug('Checking for any existing notes to close');
       const existingNotes = cls.getAllPaths();
       const toDetach: WorkspaceLeaf[] = [];
       Object.entries(this.getOpenWorkspaceLeaves()).forEach(([file, leaf]) => {
@@ -83,6 +90,7 @@ export class NotesProvider {
 
       // Ensure that it won't close anything if the new note is already open - this is to protect against ongoing workspace management
       if (Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1) {
+        debug('Found ' + toDetach.length + ' tab(s) to close');
         for (const leaf of toDetach) {
           leaf.detach();
         }
@@ -95,6 +103,7 @@ export class NotesProvider {
 
   private async handleOpen(setting: IPeriodicitySettings, newNote: TFile): Promise<void> {
     if (setting.openAndPin && Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1) {
+      debug('Opening new note');
       await this.workspace.getLeaf(true).openFile(newNote);
       this.workspace.getMostRecentLeaf()?.setPinned(true);
     }
