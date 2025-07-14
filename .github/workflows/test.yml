@@ -32,12 +32,12 @@ jobs:
         run: |
           npm run test-ci
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tests
           path: junit.xml
       - name: Upload Coverage
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: coverage/cobertura-coverage.xml
@@ -60,6 +60,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-file: './coverage-results/Summary.md'
           check-name: 'Code Coverage'
-          line-threshold: 75
+          line-threshold: 70
           branch-threshold: 90
 

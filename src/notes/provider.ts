@@ -1,13 +1,8 @@
 import { moment, Notice, type TFile, type WorkspaceLeaf } from 'obsidian';
 import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
-import Note from '.';
-import DailyNote from './daily-note';
-import MonthlyNote from './monthly-note';
-import QuarterlyNote from './quarterly-note';
-import WeeklyNote from './weekly-note';
-import YearlyNote from './yearly-note';
 import debug from '../log';
+import { DailyNote, MonthlyNote, Note, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
 
 export default class NotesProvider {
   private workspace: ObsidianWorkspace;
@@ -97,7 +92,7 @@ export default class NotesProvider {
       }
 
       // Ensure that it waits a second for the new tab to have been created if ALL existing leaves have been detached
-      await Promise.all([setTimeout(() => {}, 1000)]);
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 

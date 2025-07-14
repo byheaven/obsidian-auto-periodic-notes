@@ -1,10 +1,10 @@
 # Automatic Periodic Notes for Obsidian
 
-Creates new periodic notes automatically in the background and allows these to
-be pinned in your open tabs; supports daily, weekly, monthly, quarterly and 
-yearly notes.
+Creates new periodic notes automatically in the background and allows these to be pinned in your open tabs; supports daily, weekly, monthly, quarterly and yearly notes.
 
 Designed to work with [Obsidian](https://obsidian.md), requires the [Periodic Notes](https://github.com/liamcain/obsidian-periodic-notes) plugin.
+
+_Note: this now supports the current (**v0.0.17**) and newer Beta (**v1.0.0-beta3**) versions of Periodic Notes available via [BRAT](https://tfthacker.com/BRAT). This functionality is provided through a [abstract provider](https://github.com/jamiefdhurst/obsidian-periodic-notes-provider) for the required plugin._
 
 This plugin respects the settings of the Periodic Notes plugin, creating your notes using the templates, format and location you have selected.
 
@@ -26,7 +26,7 @@ Automatic creation can be toggled on and off for each of the supported note type
 
 ## Development
 
-This plugin has been developed using Typescript with the Obsidian and Periodic Notes APIs, Svelte for the UI and Jest for testing.
+This plugin has been developed using Typescript with the Obsidian and Periodic Notes APIs and Jest for testing.
 
 Once you've cloned the repository, to speed up plugin development it is recommended to symlink the location of the plugin directly into your local Obsidian:
 

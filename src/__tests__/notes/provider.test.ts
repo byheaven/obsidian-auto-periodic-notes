@@ -1,18 +1,10 @@
 import { MarkdownView, Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
-import DailyNote from '../../notes/daily-note';
-import MonthlyNote from '../../notes/monthly-note';
+import { DailyNote, MonthlyNote, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
 import NotesProvider from '../../notes/provider';
-import QuarterlyNote from '../../notes/quarterly-note';
-import WeeklyNote from '../../notes/weekly-note';
-import YearlyNote from '../../notes/yearly-note';
 import type { ISettings } from '../../settings';
 
 jest.mock('obsidian');
-jest.mock('../../notes/daily-note');
-jest.mock('../../notes/weekly-note');
-jest.mock('../../notes/monthly-note');
-jest.mock('../../notes/quarterly-note');
-jest.mock('../../notes/yearly-note');
+jest.mock('obsidian-periodic-notes-provider');
 
 describe('Notes Provider', () => {
 
@@ -57,9 +49,10 @@ describe('Notes Provider', () => {
 
   afterEach(() => {
     jest.resetAllMocks();
-  })
+  });
 
   it('does not create notes when nothing is available', async () => {
+    console.log(YearlyNote);
     const spyYearlyIsPresent = jest.spyOn(YearlyNote.prototype, 'isPresent');
     const spyQuarterlyIsPresent = jest.spyOn(QuarterlyNote.prototype, 'isPresent');
     const spyMonthlyIsPresent = jest.spyOn(MonthlyNote.prototype, 'isPresent');

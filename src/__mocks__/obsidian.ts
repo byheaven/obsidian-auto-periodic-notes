@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as momentImpl from 'moment';
 
+export class Plugin {}
 export class PluginSettingTab {}
 export class TAbstractFile {}
 export class TFile extends TAbstractFile {
