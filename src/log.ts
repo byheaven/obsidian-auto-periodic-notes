@@ -1,3 +1,3 @@
 export default function debug(msg: string): void {
-  console.debug(`[APN] ${msg}`);
+  console.debug(`[JH:APN] ${msg}`);
 }

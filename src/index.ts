@@ -1,11 +1,11 @@
 import { Notice, Plugin, type PluginManifest } from 'obsidian';
+import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
 import { SETTINGS_UPDATED } from './events';
+import debug from './log';
 import NotesProvider from './notes/provider';
-import { PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from './plugins/periodic-notes';
 import { applyDefaultSettings, type ISettings } from './settings';
 import AutoPeriodicNotesSettingsTab from './settings/tab';
 import type { ObsidianApp, ObsidianWorkspace } from './types';
-import debug from './log';
 
 export default class AutoPeriodicNotes extends Plugin {
   public settings: ISettings;
@@ -16,7 +16,7 @@ export default class AutoPeriodicNotes extends Plugin {
     super(app, manifest);
 
     this.settings = {} as ISettings;
-    this.periodicNotesPlugin = new PeriodicNotesPluginAdapter(app);
+    this.periodicNotesPlugin = new PeriodicNotesPluginAdapter(app as ObsidianAppWithPlugins);
     this.notes = new NotesProvider(app.workspace);
   }
 
@@ -68,9 +68,13 @@ export default class AutoPeriodicNotes extends Plugin {
 
   private syncPeriodicNotesSettings(): void {
     debug('Received new settings from Periodic Notes plugin');
-    this.updateSettings(this.periodicNotesPlugin.convertSettings(
-      this.settings, this.periodicNotesPlugin.getSettings()
-    ));
+    const pluginSettings = this.periodicNotesPlugin.convertSettings();
+    this.settings.daily.available = pluginSettings.daily.available;
+    this.settings.weekly.available = pluginSettings.weekly.available;
+    this.settings.monthly.available = pluginSettings.monthly.available;
+    this.settings.quarterly.available = pluginSettings.quarterly.available;
+    this.settings.yearly.available = pluginSettings.yearly.available;
+    this.updateSettings(this.settings);
   }
 
   private onSettingsUpdate(): void {
