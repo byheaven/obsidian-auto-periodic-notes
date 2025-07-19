@@ -6,9 +6,12 @@ import type { ISettings } from '../../settings';
 jest.mock('obsidian');
 jest.mock('obsidian-periodic-notes-provider');
 
+const TEST_WAIT_TIMEOUT: number = 10;
+
 describe('Notes Provider', () => {
 
   let settings: ISettings;
+  let sut: NotesProvider;
   
   beforeEach(() => {
     settings = {
@@ -45,6 +48,8 @@ describe('Notes Provider', () => {
         openAndPin: false,
       },
     };
+
+    sut = new NotesProvider(new Workspace(), TEST_WAIT_TIMEOUT);
   });
 
   afterEach(() => {
@@ -59,7 +64,6 @@ describe('Notes Provider', () => {
     const spyWeeklyIsPresent = jest.spyOn(WeeklyNote.prototype, 'isPresent');
     const spyDailyIsPresent = jest.spyOn(DailyNote.prototype, 'isPresent');
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(YearlyNote).toHaveBeenCalled();
@@ -83,7 +87,6 @@ describe('Notes Provider', () => {
     const spyWeeklyIsPresent = jest.spyOn(WeeklyNote.prototype, 'isPresent');
     const spyDailyIsPresent = jest.spyOn(DailyNote.prototype, 'isPresent');
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(YearlyNote).toHaveBeenCalled();
@@ -106,7 +109,6 @@ describe('Notes Provider', () => {
     mockDailyIsPresent.mockImplementation(() => true);
     const spyDailyCreate = jest.spyOn(DailyNote.prototype, 'create');
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -126,7 +128,6 @@ describe('Notes Provider', () => {
     // Mock Date so moment's logic is untouched
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-18T12:00:00Z').getTime());
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -163,7 +164,6 @@ describe('Notes Provider', () => {
     const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
     mockDailyCreate.mockImplementation(() => Promise.resolve(new TFile()));
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -188,7 +188,6 @@ describe('Notes Provider', () => {
       [].map(cb);
     });
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -229,7 +228,6 @@ describe('Notes Provider', () => {
       leaves.map(cb);
     });
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -269,7 +267,6 @@ describe('Notes Provider', () => {
       leaves.map(cb);
     });
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -295,8 +292,6 @@ describe('Notes Provider', () => {
     mockSetPinned.mockImplementation(() => {});
     const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
     mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
-    const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
-    mockGetMostRecentLeaf.mockImplementation(() => null);
     const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
     const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
     mockViewGetState.mockReturnValueOnce(undefined)
@@ -316,42 +311,12 @@ describe('Notes Provider', () => {
       leaves.map(cb);
     });
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyIsPresent).toHaveBeenCalled();
     expect(mockDailyCreate).toHaveBeenCalled();
     expect(mockOpenFile).not.toHaveBeenCalledWith(expectedFile);
-    expect(mockSetPinned).not.toHaveBeenCalled();
-  });
-
-  it('pins new notes but ignores when most recent leaf call fails', async () => {
-    settings.daily.available = true;
-    settings.daily.enabled = true;
-    settings.daily.openAndPin = true;
-
-    const expectedFile = new TFile();
-    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
-    mockDailyIsPresent.mockImplementation(() => false);
-    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
-    mockDailyCreate.mockImplementation(() => Promise.resolve(expectedFile));
-    const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
-    mockOpenFile.mockImplementation(() => Promise.resolve());
-    const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
-    mockSetPinned.mockImplementation(() => {});
-    const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
-    mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
-    const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
-    mockGetMostRecentLeaf.mockImplementation(() => null);
-
-    const sut = new NotesProvider(new Workspace());
-    await sut.checkAndCreateNotes(settings);
-
-    expect(DailyNote).toHaveBeenCalled();
-    expect(mockDailyIsPresent).toHaveBeenCalled();
-    expect(mockDailyCreate).toHaveBeenCalled();
-    expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
     expect(mockSetPinned).not.toHaveBeenCalled();
   });
 
@@ -371,10 +336,7 @@ describe('Notes Provider', () => {
     mockSetPinned.mockImplementation(() => {});
     const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
     mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
-    const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
-    mockGetMostRecentLeaf.mockImplementation(() => new WorkspaceLeaf());
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -423,10 +385,7 @@ describe('Notes Provider', () => {
     mockSetPinned.mockImplementation(() => {});
     const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
     mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
-    const mockGetMostRecentLeaf = Workspace.prototype.getMostRecentLeaf as jest.MockedFunction<typeof Workspace.prototype.getMostRecentLeaf>;
-    mockGetMostRecentLeaf.mockImplementation(() => new WorkspaceLeaf());
 
-    const sut = new NotesProvider(new Workspace());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
