@@ -4,12 +4,16 @@ import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
 import { DailyNote, MonthlyNote, Note, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
 
+const DEFAULT_WAIT_TIMEOUT: number = 1000;
+
 export default class NotesProvider {
+  private waitTimeout: number;
   private workspace: ObsidianWorkspace;
   private workspaceLeaves: Record<string, WorkspaceLeaf>;
 
-  constructor(workspace: ObsidianWorkspace) {
+  constructor(workspace: ObsidianWorkspace, waitTimeout?: number) {
     this.workspace = workspace;
+    this.waitTimeout = waitTimeout || DEFAULT_WAIT_TIMEOUT;
   }
 
   async checkAndCreateNotes(settings: ISettings): Promise<void> {
@@ -54,7 +58,6 @@ export default class NotesProvider {
 
         await this.handleClose(setting, cls, existingNote);
         await this.handleOpen(setting, existingNote);
-        
       }
 
     }
@@ -92,15 +95,16 @@ export default class NotesProvider {
       }
 
       // Ensure that it waits a second for the new tab to have been created if ALL existing leaves have been detached
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, this.waitTimeout));
     }
   }
 
   private async handleOpen(setting: IPeriodicitySettings, newNote: TFile): Promise<void> {
     if (setting.openAndPin && Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1) {
-      debug('Opening new note');
-      await this.workspace.getLeaf(true).openFile(newNote);
-      this.workspace.getMostRecentLeaf()?.setPinned(true);
+      debug('Opening note in new tab');
+      const leaf = this.workspace.getLeaf(true);
+      await leaf.openFile(newNote);
+      leaf.setPinned(true);
     }
   }
 }
