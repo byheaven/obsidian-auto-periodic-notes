@@ -65,7 +65,7 @@ export default class NotesProvider {
 
   private getOpenWorkspaceLeaves(): Record<string, WorkspaceLeaf> {
     if (!Object.keys(this.workspaceLeaves).length) {
-      this.workspace.iterateRootLeaves((leaf) => {
+      this.workspace.iterateAllLeaves((leaf) => {
         if (leaf.view.getState() && typeof leaf.view.getState().file !== 'undefined') {
           this.workspaceLeaves[leaf.view.getState().file] = leaf;
         }
