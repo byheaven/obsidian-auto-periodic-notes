@@ -15,7 +15,7 @@ export const Notice = jest.fn();
 
 export const Workspace = jest.fn();
 Workspace.prototype.getLeaf = jest.fn();
-Workspace.prototype.iterateRootLeaves = jest.fn();
+Workspace.prototype.iterateAllLeaves = jest.fn();
 export const WorkspaceLeaf = jest.fn();
 WorkspaceLeaf.prototype.detach = jest.fn();
 WorkspaceLeaf.prototype.openFile = jest.fn();

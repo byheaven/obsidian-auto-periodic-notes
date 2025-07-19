@@ -183,8 +183,8 @@ describe('Notes Provider', () => {
     mockDailyCreate.mockImplementation(() => Promise.resolve(new TFile()));
     const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
     mockDailyGetAllPaths.mockReturnValue([]);
-    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
-    mockIterateRootLeaves.mockImplementation((cb) => {
+    const mockIterateAllLeaves = Workspace.prototype.iterateAllLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateAllLeaves>;
+    mockIterateAllLeaves.mockImplementation((cb) => {
       [].map(cb);
     });
 
@@ -192,7 +192,7 @@ describe('Notes Provider', () => {
 
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyGetAllPaths).toHaveBeenCalled();
-    expect(mockIterateRootLeaves).toHaveBeenCalled();
+    expect(mockIterateAllLeaves).toHaveBeenCalled();
   });
 
   it('does not close existing notes when the new note is already open', async () => {
@@ -208,7 +208,7 @@ describe('Notes Provider', () => {
     mockDailyCreate.mockImplementation(() => Promise.resolve(newFile));
     const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
     mockDailyGetAllPaths.mockReturnValue(['daily/2025-01-01.md', newFile.path]);
-    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockIterateAllLeaves = Workspace.prototype.iterateAllLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateAllLeaves>;
     const mockWorkspaceLeafDetach = WorkspaceLeaf.prototype.detach as jest.MockedFunction<typeof WorkspaceLeaf.prototype.detach>;
     const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
     mockViewGetState.mockReturnValueOnce(undefined)
@@ -224,7 +224,7 @@ describe('Notes Provider', () => {
     leaves[1].view = new MarkdownView(leaves[1]);
     leaves[2].view = new MarkdownView(leaves[2]);
     leaves[3].view = new MarkdownView(leaves[3]);
-    mockIterateRootLeaves.mockImplementation((cb) => {
+    mockIterateAllLeaves.mockImplementation((cb) => {
       leaves.map(cb);
     });
 
@@ -232,7 +232,7 @@ describe('Notes Provider', () => {
 
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyGetAllPaths).toHaveBeenCalled();
-    expect(mockIterateRootLeaves).toHaveBeenCalled();
+    expect(mockIterateAllLeaves).toHaveBeenCalled();
     expect(mockWorkspaceLeafDetach).not.toHaveBeenCalled();
   });
 
@@ -247,7 +247,7 @@ describe('Notes Provider', () => {
     mockDailyCreate.mockImplementation(() => Promise.resolve(new TFile()));
     const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
     mockDailyGetAllPaths.mockReturnValue(['daily/2025-01-01.md']);
-    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockIterateAllLeaves = Workspace.prototype.iterateAllLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateAllLeaves>;
     const mockWorkspaceLeafDetach = WorkspaceLeaf.prototype.detach as jest.MockedFunction<typeof WorkspaceLeaf.prototype.detach>;
     const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
     mockViewGetState.mockReturnValueOnce(undefined)
@@ -263,7 +263,7 @@ describe('Notes Provider', () => {
     leaves[1].view = new MarkdownView(leaves[1]);
     leaves[2].view = new MarkdownView(leaves[2]);
     leaves[3].view = new MarkdownView(leaves[3]);
-    mockIterateRootLeaves.mockImplementation((cb) => {
+    mockIterateAllLeaves.mockImplementation((cb) => {
       leaves.map(cb);
     });
 
@@ -271,7 +271,7 @@ describe('Notes Provider', () => {
 
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyGetAllPaths).toHaveBeenCalled();
-    expect(mockIterateRootLeaves).toHaveBeenCalled();
+    expect(mockIterateAllLeaves).toHaveBeenCalled();
     expect(mockWorkspaceLeafDetach).toHaveBeenCalledTimes(1);
   });
 
@@ -292,7 +292,7 @@ describe('Notes Provider', () => {
     mockSetPinned.mockImplementation(() => {});
     const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
     mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
-    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockIterateAllLeaves = Workspace.prototype.iterateAllLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateAllLeaves>;
     const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
     mockViewGetState.mockReturnValueOnce(undefined)
       .mockReturnValueOnce({})
@@ -307,7 +307,7 @@ describe('Notes Provider', () => {
     leaves[1].view = new MarkdownView(leaves[1]);
     leaves[2].view = new MarkdownView(leaves[2]);
     leaves[3].view = new MarkdownView(leaves[3]);
-    mockIterateRootLeaves.mockImplementation((cb) => {
+    mockIterateAllLeaves.mockImplementation((cb) => {
       leaves.map(cb);
     });
 
@@ -360,7 +360,7 @@ describe('Notes Provider', () => {
     mockGetCurrent.mockImplementation(() => expectedFile);
     const mockDailyGetAllPaths = DailyNote.prototype.getAllPaths as jest.MockedFunction<typeof DailyNote.prototype.getAllPaths>;
     mockDailyGetAllPaths.mockReturnValue(['daily/2025-01-01.md']);
-    const mockIterateRootLeaves = Workspace.prototype.iterateRootLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateRootLeaves>;
+    const mockIterateAllLeaves = Workspace.prototype.iterateAllLeaves as jest.MockedFunction<typeof Workspace.prototype.iterateAllLeaves>;
     const mockWorkspaceLeafDetach = WorkspaceLeaf.prototype.detach as jest.MockedFunction<typeof WorkspaceLeaf.prototype.detach>;
     const mockViewGetState = MarkdownView.prototype.getState as jest.MockedFunction<typeof MarkdownView.prototype.getState>;
     mockViewGetState.mockReturnValueOnce(undefined)
@@ -376,7 +376,7 @@ describe('Notes Provider', () => {
     leaves[1].view = new MarkdownView(leaves[1]);
     leaves[2].view = new MarkdownView(leaves[2]);
     leaves[3].view = new MarkdownView(leaves[3]);
-    mockIterateRootLeaves.mockImplementation((cb) => {
+    mockIterateAllLeaves.mockImplementation((cb) => {
       leaves.map(cb);
     });
     const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
@@ -390,7 +390,7 @@ describe('Notes Provider', () => {
 
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyGetAllPaths).toHaveBeenCalled();
-    expect(mockIterateRootLeaves).toHaveBeenCalled();
+    expect(mockIterateAllLeaves).toHaveBeenCalled();
     expect(mockWorkspaceLeafDetach).toHaveBeenCalledTimes(1);
     expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
     expect(mockSetPinned).toHaveBeenCalled();
