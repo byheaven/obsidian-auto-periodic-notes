@@ -22,6 +22,7 @@ describe('Notes Provider', () => {
         closeExisting: false,
         openAndPin: false,
         excludeWeekends: false,
+        openAtFirstPosition: false,
       },
       weekly: {
         available: false,
@@ -49,7 +50,9 @@ describe('Notes Provider', () => {
       },
     };
 
-    sut = new NotesProvider(new Workspace(), TEST_WAIT_TIMEOUT);
+    const mockApp = { workspace: new Workspace() } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    sut = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
   });
 
   afterEach(() => {
@@ -147,7 +150,9 @@ describe('Notes Provider', () => {
     // Mock Date so moment's logic is untouched
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-19T12:00:00Z').getTime());
 
-    const sut = new NotesProvider(new Workspace());
+    const mockApp = { workspace: new Workspace() } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const sut = new NotesProvider(new Workspace(), mockApp, mockPlugin);
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();

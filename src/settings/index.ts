@@ -14,6 +14,7 @@ export interface IPeriodicitySettings {
 
 export interface IDailySettings extends IPeriodicitySettings {
   excludeWeekends: boolean;
+  openAtFirstPosition: boolean;
 }
 
 export interface ISettings {
@@ -34,7 +35,7 @@ export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze(
 
 export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   alwaysOpen: false,
-  daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false, },
+  daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false, openAtFirstPosition: false },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
   quarterly: { ...DEFAULT_PERIODICITY_SETTINGS },

@@ -1,8 +1,9 @@
-import { moment, Notice, type TFile, type WorkspaceLeaf } from 'obsidian';
+import { moment, Notice, TFile, WorkspaceLeaf, App } from 'obsidian';
 import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
 import { DailyNote, MonthlyNote, Note, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
+import type AutoPeriodicNotes from '../index';
 
 const DEFAULT_WAIT_TIMEOUT: number = 1000;
 
@@ -10,9 +11,13 @@ export default class NotesProvider {
   private waitTimeout: number;
   private workspace: ObsidianWorkspace;
   private workspaceLeaves: Record<string, WorkspaceLeaf>;
+  private app: App;
+  private plugin: AutoPeriodicNotes;
 
-  constructor(workspace: ObsidianWorkspace, waitTimeout?: number) {
+  constructor(workspace: ObsidianWorkspace, app: App, plugin: AutoPeriodicNotes, waitTimeout?: number) {
     this.workspace = workspace;
+    this.app = app;
+    this.plugin = plugin;
     this.waitTimeout = waitTimeout || DEFAULT_WAIT_TIMEOUT;
   }
 
@@ -49,7 +54,7 @@ export default class NotesProvider {
         );
 
         await this.handleClose(setting, cls, newNote);
-        await this.handleOpen(setting, newNote);
+        await this.handleOpen(setting, newNote, term);
 
       } else if (alwaysOpen) {
 
@@ -57,7 +62,7 @@ export default class NotesProvider {
         const existingNote: TFile = cls.getCurrent();
 
         await this.handleClose(setting, cls, existingNote);
-        await this.handleOpen(setting, existingNote);
+        await this.handleOpen(setting, existingNote, term);
       }
 
     }
@@ -99,12 +104,42 @@ export default class NotesProvider {
     }
   }
 
-  private async handleOpen(setting: IPeriodicitySettings, newNote: TFile): Promise<void> {
+  private async handleOpen(setting: IPeriodicitySettings, newNote: TFile, term?: string): Promise<void> {
     if (setting.openAndPin && Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1) {
       debug('Opening note in new tab');
-      const leaf = this.workspace.getLeaf(true);
+
+      // Check if this is a daily note with openAtFirstPosition enabled
+      const shouldOpenAtFirstPosition = term === 'daily' &&
+        'openAtFirstPosition' in setting &&
+        (setting as any).openAtFirstPosition;
+
+      let leaf: WorkspaceLeaf;
+
+      if (shouldOpenAtFirstPosition) {
+        // Signal to the monkey patch that we're creating a daily note
+        this.plugin.setDailyNoteCreation(true);
+
+        try {
+          // Use standard getLeaf - our monkey patch will intercept and create at first position
+          leaf = this.workspace.getLeaf('tab');
+          debug('Used monkey patch to create daily note leaf at first position');
+        } finally {
+          // Always clear the signal
+          this.plugin.setDailyNoteCreation(false);
+        }
+      } else {
+        leaf = this.workspace.getLeaf(true);
+      }
+
       await leaf.openFile(newNote);
       leaf.setPinned(true);
     }
+  }
+
+
+  // Helper method to check if a leaf is empty and can be reused
+  private isEmptyLeaf(leaf: WorkspaceLeaf): boolean {
+    const viewType = leaf.view.getViewType();
+    return ["empty", "home-tab-view"].includes(viewType);
   }
 }
