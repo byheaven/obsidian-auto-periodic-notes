@@ -14,6 +14,7 @@ export default class AutoPeriodicNotes extends Plugin {
   private originalGetLeaf: typeof Workspace.prototype.getLeaf;
   private patchedGetLeaf?: typeof Workspace.prototype.getLeaf;
   private isDailyNoteCreation: boolean = false;
+  private dailyCheckTimeout: number | null = null;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
@@ -51,13 +52,10 @@ export default class AutoPeriodicNotes extends Plugin {
     // Add the settings tab
     this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this));
 
-    // Register the standard check for new notes and run immediately
-    this.registerInterval(
-      window.setInterval(() => {
-        this.notes.checkAndCreateNotes(this.settings);
-      }, 300000)
-    );
+    // Perform an immediate check, then schedule the daily run at 00:02
     this.notes.checkAndCreateNotes(this.settings);
+    this.scheduleNextDailyCheck();
+    this.register(this.clearDailyCheckTimeout.bind(this));
   }
 
   async loadSettings(): Promise<void> {
@@ -153,5 +151,31 @@ export default class AutoPeriodicNotes extends Plugin {
   // Public method for NotesProvider to signal daily note creation
   public setDailyNoteCreation(isCreating: boolean): void {
     this.isDailyNoteCreation = isCreating;
+  }
+
+  private scheduleNextDailyCheck(): void {
+    this.clearDailyCheckTimeout();
+
+    const now = new Date();
+    const nextRun = new Date(now);
+    nextRun.setHours(0, 2, 0, 0);
+
+    if (nextRun <= now) {
+      nextRun.setDate(nextRun.getDate() + 1);
+    }
+
+    const delay = nextRun.getTime() - now.getTime();
+
+    this.dailyCheckTimeout = window.setTimeout(async () => {
+      this.notes.checkAndCreateNotes(this.settings);
+      this.scheduleNextDailyCheck();
+    }, delay);
+  }
+
+  private clearDailyCheckTimeout(): void {
+    if (this.dailyCheckTimeout !== null) {
+      window.clearTimeout(this.dailyCheckTimeout);
+      this.dailyCheckTimeout = null;
+    }
   }
 }
