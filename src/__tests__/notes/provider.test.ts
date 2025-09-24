@@ -9,9 +9,10 @@ jest.mock('obsidian-periodic-notes-provider');
 const TEST_WAIT_TIMEOUT: number = 10;
 
 describe('Notes Provider', () => {
-
+  
   let settings: ISettings;
   let sut: NotesProvider;
+  let mockPlugin: any;
   
   beforeEach(() => {
     settings = {
@@ -52,7 +53,7 @@ describe('Notes Provider', () => {
     };
 
     const mockApp = { workspace: new Workspace() } as any;
-    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
     sut = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
   });
 
@@ -456,6 +457,35 @@ describe('Notes Provider', () => {
     expect(mockDailyCreate).toHaveBeenCalled();
     expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
     expect(mockSetPinned).toHaveBeenCalled();
+  });
+
+  it('opens daily notes at first position when enabled', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.openAndPin = true;
+    settings.daily.openAtFirstPosition = true;
+
+    const expectedFile = new TFile();
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(expectedFile));
+    const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+    mockOpenFile.mockImplementation(() => Promise.resolve());
+    const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+    mockSetPinned.mockImplementation(() => {});
+    const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+    mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyCreate).toHaveBeenCalled();
+    expect(mockGetLeaf).toHaveBeenCalledWith('tab');
+    expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
+    expect(mockSetPinned).toHaveBeenCalled();
+    expect(mockPlugin.setDailyNoteCreation).toHaveBeenNthCalledWith(1, true);
+    expect(mockPlugin.setDailyNoteCreation).toHaveBeenNthCalledWith(2, false);
   });
 
   it('closes open files and pins new ones even when not creating', async () => {

@@ -12,6 +12,7 @@ export default class AutoPeriodicNotes extends Plugin {
   private periodicNotesPlugin: PeriodicNotesPluginAdapter;
   private notes: NotesProvider;
   private originalGetLeaf: typeof Workspace.prototype.getLeaf;
+  private patchedGetLeaf?: typeof Workspace.prototype.getLeaf;
   private isDailyNoteCreation: boolean = false;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
@@ -91,7 +92,7 @@ export default class AutoPeriodicNotes extends Plugin {
     this.originalGetLeaf = this.app.workspace.getLeaf.bind(this.app.workspace);
 
     // Monkey patch getLeaf method
-    this.app.workspace.getLeaf = (newLeaf?: any) => {
+    this.patchedGetLeaf = (newLeaf?: any) => {
       // If this is for creating a daily note and first position is enabled
       if (this.isDailyNoteCreation && this.settings.daily.openAtFirstPosition) {
         debug('Intercepted getLeaf call for daily note - creating at first position');
@@ -102,11 +103,17 @@ export default class AutoPeriodicNotes extends Plugin {
       return this.originalGetLeaf(newLeaf);
     };
 
+    this.app.workspace.getLeaf = this.patchedGetLeaf;
+
     // Register cleanup
     this.register(() => {
-      if (this.originalGetLeaf) {
-        this.app.workspace.getLeaf = this.originalGetLeaf;
-        debug('Restored original getLeaf method');
+      if (this.originalGetLeaf && this.patchedGetLeaf) {
+        if (this.app.workspace.getLeaf === this.patchedGetLeaf) {
+          this.app.workspace.getLeaf = this.originalGetLeaf;
+          debug('Restored original getLeaf method');
+        } else {
+          debug('Skipped restoring getLeaf; another plugin replaced it');
+        }
       }
     });
   }
