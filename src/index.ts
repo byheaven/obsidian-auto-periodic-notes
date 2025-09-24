@@ -1,4 +1,4 @@
-import { Notice, Plugin, type PluginManifest } from 'obsidian';
+import { Notice, Plugin, type PluginManifest, Workspace, WorkspaceLeaf } from 'obsidian';
 import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
 import { SETTINGS_UPDATED } from './events';
 import debug from './log';
@@ -11,19 +11,24 @@ export default class AutoPeriodicNotes extends Plugin {
   public settings: ISettings;
   private periodicNotesPlugin: PeriodicNotesPluginAdapter;
   private notes: NotesProvider;
+  private originalGetLeaf: typeof Workspace.prototype.getLeaf;
+  private isDailyNoteCreation: boolean = false;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
 
     this.settings = {} as ISettings;
     this.periodicNotesPlugin = new PeriodicNotesPluginAdapter(app as ObsidianAppWithPlugins);
-    this.notes = new NotesProvider(app.workspace, app);
+    this.notes = new NotesProvider(app.workspace, app, this);
   }
 
   async onload(): Promise<void> {
     this.updateSettings = this.updateSettings.bind(this);
 
     await this.loadSettings();
+
+    // Set up monkey patch for workspace.getLeaf to control daily note positioning
+    this.setupWorkspacePatches();
 
     this.app.workspace.onLayoutReady(this.onLayoutReady.bind(this));
   }
@@ -79,5 +84,67 @@ export default class AutoPeriodicNotes extends Plugin {
 
   private onSettingsUpdate(): void {
     this.app.workspace.trigger(SETTINGS_UPDATED);
+  }
+
+  private setupWorkspacePatches(): void {
+    // Store original method
+    this.originalGetLeaf = this.app.workspace.getLeaf.bind(this.app.workspace);
+
+    // Monkey patch getLeaf method
+    this.app.workspace.getLeaf = (newLeaf?: any) => {
+      // If this is for creating a daily note and first position is enabled
+      if (this.isDailyNoteCreation && this.settings.daily.openAtFirstPosition) {
+        debug('Intercepted getLeaf call for daily note - creating at first position');
+        return this.createLeafAtFirstPosition();
+      }
+
+      // Otherwise use original method (let open-tab-settings or others handle it)
+      return this.originalGetLeaf(newLeaf);
+    };
+
+    // Register cleanup
+    this.register(() => {
+      if (this.originalGetLeaf) {
+        this.app.workspace.getLeaf = this.originalGetLeaf;
+        debug('Restored original getLeaf method');
+      }
+    });
+  }
+
+  private createLeafAtFirstPosition(): WorkspaceLeaf {
+    const activeLeaf = this.app.workspace.getMostRecentLeaf();
+    if (!activeLeaf) {
+      return this.originalGetLeaf('tab');
+    }
+
+    const activeTabGroup = activeLeaf.parent;
+
+    // Check if first position has an empty leaf we can reuse
+    const children = (activeTabGroup as any).children;
+    if (children && children.length > 0) {
+      const firstLeaf = children[0];
+      // Use a basic empty check since we can't easily access notes.isEmptyLeaf here
+      const viewType = firstLeaf.view.getViewType();
+      if (["empty", "home-tab-view"].includes(viewType)) {
+        debug('Reusing empty leaf at first position');
+        return firstLeaf;
+      }
+    }
+
+    // Create new leaf at first position
+    try {
+      const newLeaf = new (WorkspaceLeaf as any)(this.app);
+      (activeTabGroup as any).insertChild(0, newLeaf);
+      debug('Created new leaf at first position via monkey patch');
+      return newLeaf;
+    } catch (error) {
+      debug('Failed to create leaf at first position, using fallback: ' + error);
+      return this.originalGetLeaf('tab');
+    }
+  }
+
+  // Public method for NotesProvider to signal daily note creation
+  public setDailyNoteCreation(isCreating: boolean): void {
+    this.isDailyNoteCreation = isCreating;
   }
 }

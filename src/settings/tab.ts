@@ -87,6 +87,18 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
                   await this.plugin.updateSettings(settings);
                 });
             });
+
+          new Setting(this.containerEl)
+            .setName(`Open daily notes at first position`)
+            .setDesc('When opening daily notes, position the tab at the first position instead of at the end.')
+            .addToggle((toggle) => {
+              toggle
+                .setValue(settings[periodicity].openAtFirstPosition)
+                .onChange(async (val) => {
+                  settings[periodicity].openAtFirstPosition = val;
+                  await this.plugin.updateSettings(settings);
+                });
+            });
         }
 
         new Setting(this.containerEl)
