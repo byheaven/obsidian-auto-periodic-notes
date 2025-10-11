@@ -90,6 +90,91 @@ The solution was derived from analyzing the [open-tab-settings plugin](https://g
 - Post-creation movement with `moveChild()` (timing issues)
 - Relying on `getLeaf()` parameter variations (inconsistent behavior)
 
+## Plugin Compatibility: Monkey-Around Pattern
+
+### Problem: Conflicts with Other Plugins
+
+When multiple Obsidian plugins need to modify the same core methods (monkey-patching), conflicts can arise if they use different patching approaches. This plugin initially had compatibility issues with the `open-tab-settings` plugin.
+
+**Observed Issue:**
+- Users reported that `open-tab-settings`'s "prevent duplicate tabs" feature stopped working when both plugins were enabled
+- Clicking on an already-open file would create duplicate tabs instead of jumping to the existing tab
+
+### Root Cause Analysis
+
+**Monkey-Patching Conflict:**
+1. **open-tab-settings** uses the `monkey-around` library to patch `Workspace.prototype.getLeaf` (prototype method)
+2. **obsidian-auto-periodic-notes** originally replaced `workspace.getLeaf` directly (instance method)
+3. Instance method assignments override prototype methods, causing the `open-tab-settings` patch to be completely bypassed
+
+**Why This Matters:**
+- When a method is assigned to an instance (`this.app.workspace.getLeaf = ...`), JavaScript looks up this instance property first
+- The prototype chain is never consulted, so any `Workspace.prototype.getLeaf` patches are ignored
+- This breaks cooperative patching between plugins
+
+### Solution: Use monkey-around Library
+
+**Implementation Changes:**
+1. **Added Dependency:** Installed `monkey-around` as a dev dependency
+2. **Refactored Patching:** Changed from direct method replacement to `around(Workspace.prototype, {...})`
+3. **Proper Cleanup:** Used the cleanup function returned by `around()` for proper unpatching
+
+**Code Location:** `src/index.ts:88-115`
+
+**Key Implementation Pattern:**
+```typescript
+import { around } from 'monkey-around';
+
+private setupWorkspacePatches(): void {
+  const plugin = this;
+
+  // Use monkey-around for cooperative patching
+  this.monkeyPatchCleanup = around(Workspace.prototype, {
+    getLeaf: (oldMethod) => {
+      return function (this: Workspace, newLeaf?: any) {
+        // Plugin-specific logic with flag check
+        if (plugin.isDailyNoteCreation && plugin.settings.daily.openAtFirstPosition) {
+          return plugin.createLeafAtFirstPosition();
+        }
+
+        // Call original method (allows other patches to run)
+        return oldMethod.call(this, newLeaf);
+      };
+    }
+  });
+
+  // Register cleanup on plugin unload
+  this.register(() => {
+    if (this.monkeyPatchCleanup) {
+      this.monkeyPatchCleanup();
+    }
+  });
+}
+```
+
+### Benefits of monkey-around
+
+1. **Cooperative Patching:** Multiple plugins can patch the same method without conflicts
+2. **Proper Chaining:** Each patch calls the previous one, forming a chain
+3. **Clean Unloading:** Patches can be removed in any order without breaking the chain
+4. **De-duplication:** Built-in support for ensuring patches run only once
+
+### Testing Compatibility
+
+After implementing this fix:
+- All 23 existing tests continue to pass
+- Compatible with `open-tab-settings` "prevent duplicate tabs" feature
+- Both plugins can coexist and their features work as expected
+
+### Best Practices for Obsidian Plugin Development
+
+**When Patching Core Methods:**
+- Always use `monkey-around` library for patching prototype methods
+- Never directly assign to instance methods (`workspace.method = ...`)
+- Always provide cleanup functions and register them with `this.register()`
+- Use feature flags or conditions to control when your patch logic runs
+- Test compatibility with popular plugins that might patch the same methods
+
 ## Testing
 
 Uses Jest with jsdom environment for testing Obsidian plugin functionality. Mock implementations are in `src/__mocks__/obsidian.ts`.

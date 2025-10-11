@@ -1,5 +1,6 @@
 import { Notice, Plugin, type PluginManifest, Workspace, WorkspaceLeaf } from 'obsidian';
 import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
+import { around } from 'monkey-around';
 import { SETTINGS_UPDATED } from './events';
 import debug from './log';
 import NotesProvider from './notes/provider';
@@ -11,8 +12,7 @@ export default class AutoPeriodicNotes extends Plugin {
   public settings: ISettings;
   private periodicNotesPlugin: PeriodicNotesPluginAdapter;
   private notes: NotesProvider;
-  private originalGetLeaf: typeof Workspace.prototype.getLeaf;
-  private patchedGetLeaf?: typeof Workspace.prototype.getLeaf;
+  private monkeyPatchCleanup?: () => void;
   private isDailyNoteCreation: boolean = false;
   private dailyCheckTimeout: number | null = null;
 
@@ -86,32 +86,30 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private setupWorkspacePatches(): void {
-    // Store original method
-    this.originalGetLeaf = this.app.workspace.getLeaf.bind(this.app.workspace);
+    // Capture plugin instance in closure for use in patch
+    const plugin = this;
 
-    // Monkey patch getLeaf method
-    this.patchedGetLeaf = (newLeaf?: any) => {
-      // If this is for creating a daily note and first position is enabled
-      if (this.isDailyNoteCreation && this.settings.daily.openAtFirstPosition) {
-        debug('Intercepted getLeaf call for daily note - creating at first position');
-        return this.createLeafAtFirstPosition();
+    // Use monkey-around to properly cooperate with other plugins (e.g., open-tab-settings)
+    this.monkeyPatchCleanup = around(Workspace.prototype, {
+      getLeaf: (oldMethod) => {
+        return function (this: Workspace, newLeaf?: any) {
+          // If this is for creating a daily note and first position is enabled
+          if (plugin.isDailyNoteCreation && plugin.settings.daily.openAtFirstPosition) {
+            debug('Intercepted getLeaf call for daily note - creating at first position');
+            return plugin.createLeafAtFirstPosition();
+          }
+
+          // Otherwise use original method (let open-tab-settings or others handle it)
+          return oldMethod.call(this, newLeaf);
+        };
       }
-
-      // Otherwise use original method (let open-tab-settings or others handle it)
-      return this.originalGetLeaf(newLeaf);
-    };
-
-    this.app.workspace.getLeaf = this.patchedGetLeaf;
+    });
 
     // Register cleanup
     this.register(() => {
-      if (this.originalGetLeaf && this.patchedGetLeaf) {
-        if (this.app.workspace.getLeaf === this.patchedGetLeaf) {
-          this.app.workspace.getLeaf = this.originalGetLeaf;
-          debug('Restored original getLeaf method');
-        } else {
-          debug('Skipped restoring getLeaf; another plugin replaced it');
-        }
+      if (this.monkeyPatchCleanup) {
+        this.monkeyPatchCleanup();
+        debug('Cleaned up monkey patch');
       }
     });
   }
@@ -119,7 +117,12 @@ export default class AutoPeriodicNotes extends Plugin {
   private createLeafAtFirstPosition(): WorkspaceLeaf {
     const activeLeaf = this.app.workspace.getMostRecentLeaf();
     if (!activeLeaf) {
-      return this.originalGetLeaf('tab');
+      // Temporarily disable daily note creation flag to avoid recursion
+      const wasDailyNoteCreation = this.isDailyNoteCreation;
+      this.isDailyNoteCreation = false;
+      const leaf = this.app.workspace.getLeaf('tab');
+      this.isDailyNoteCreation = wasDailyNoteCreation;
+      return leaf;
     }
 
     const activeTabGroup = activeLeaf.parent;
@@ -144,7 +147,12 @@ export default class AutoPeriodicNotes extends Plugin {
       return newLeaf;
     } catch (error) {
       debug('Failed to create leaf at first position, using fallback: ' + error);
-      return this.originalGetLeaf('tab');
+      // Temporarily disable daily note creation flag to avoid recursion
+      const wasDailyNoteCreation = this.isDailyNoteCreation;
+      this.isDailyNoteCreation = false;
+      const leaf = this.app.workspace.getLeaf('tab');
+      this.isDailyNoteCreation = wasDailyNoteCreation;
+      return leaf;
     }
   }
 
