@@ -18,6 +18,7 @@ describe('Notes Provider', () => {
     settings = {
       alwaysOpen: false,
       processTemplater: false,
+      debug: false,
       daily: {
         available: false,
         enabled: false,

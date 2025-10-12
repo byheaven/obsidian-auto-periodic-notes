@@ -26,6 +26,7 @@ WorkspaceLeaf.prototype.view = jest.fn();
 
 export const View = jest.fn();
 View.prototype.getState = jest.fn();
+View.prototype.getViewType = jest.fn(() => 'markdown');
 export const MarkdownView = View;
 
 class BaseComponent {

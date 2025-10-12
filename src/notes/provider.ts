@@ -24,7 +24,6 @@ export default class NotesProvider {
 
   async checkAndCreateNotes(settings: ISettings): Promise<void> {
     debug('Checking if any new notes need to be created');
-    this.workspaceLeaves = {};
 
     await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater);
     await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater);
@@ -35,7 +34,10 @@ export default class NotesProvider {
 
   private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean): Promise<void> {
     if (setting.available && setting.enabled) {
-      
+      // Clear workspace leaves cache to get fresh state for this note check
+      // This prevents stale "ghost" leaves from affecting our checks
+      this.workspaceLeaves = {};
+
       debug(`Checking if ${term} note needs to be created`);
       if (!cls.isPresent()) {
 
@@ -76,12 +78,22 @@ export default class NotesProvider {
   }
 
   private getOpenWorkspaceLeaves(): Record<string, WorkspaceLeaf> {
+    // Use cache within a single note check, but cache is cleared between notes
     if (!Object.keys(this.workspaceLeaves).length) {
       this.workspace.iterateAllLeaves((leaf) => {
-        if (leaf.view.getState() && typeof leaf.view.getState().file !== 'undefined') {
-          this.workspaceLeaves[leaf.view.getState().file] = leaf;
+        const viewType = leaf.view?.getViewType?.();
+        const state = leaf.view?.getState?.();
+
+        debug(`Leaf found - viewType: ${viewType}, state.file: ${state?.file}`);
+
+        // Only count markdown views (actual file tabs), not sidebar views like backlinks/outgoing-links
+        // Sidebar views (backlink, outgoing-link, search, etc.) can have state.file but they're not actual open file tabs
+        // undefined viewType is for test compatibility
+        if ((viewType === 'markdown' || viewType === undefined) && state && typeof state.file !== 'undefined') {
+          this.workspaceLeaves[state.file] = leaf;
         }
       });
+      debug(`Found ${Object.keys(this.workspaceLeaves).length} actual file tabs open: ${Object.keys(this.workspaceLeaves).join(', ')}`);
     }
 
     return this.workspaceLeaves;
@@ -112,7 +124,12 @@ export default class NotesProvider {
   }
 
   private async handleOpen(setting: IPeriodicitySettings, newNote: TFile, term?: string): Promise<void> {
-    if (setting.openAndPin && Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1) {
+    const openLeaves = this.getOpenWorkspaceLeaves();
+    const isAlreadyOpen = Object.keys(openLeaves).indexOf(newNote.path) !== -1;
+
+    debug(`handleOpen called: openAndPin=${setting.openAndPin}, notePath=${newNote.path}, isAlreadyOpen=${isAlreadyOpen}, openLeavesCount=${Object.keys(openLeaves).length}`);
+
+    if (setting.openAndPin && !isAlreadyOpen) {
       debug('Opening note in new tab');
 
       // Check if this is a daily note with openAtFirstPosition enabled
@@ -139,7 +156,29 @@ export default class NotesProvider {
       }
 
       await leaf.openFile(newNote);
+
+      debug(`Before setPinned - leaf parent has ${(leaf.parent as any)?.children?.length || 0} children`);
+
       leaf.setPinned(true);
+
+      debug(`After setPinned - leaf parent has ${(leaf.parent as any)?.children?.length || 0} children`);
+
+      // If this is a daily note that should be at first position, ensure it stays there after pinning
+      if (shouldOpenAtFirstPosition) {
+        const parent = leaf.parent as any;
+        if (parent && parent.children) {
+          const currentIndex = parent.children.indexOf(leaf);
+          debug(`Daily note leaf is at index ${currentIndex} after pinning, moving to index 0`);
+
+          if (currentIndex > 0) {
+            // Move the leaf to first position
+            parent.children.splice(currentIndex, 1);
+            parent.children.unshift(leaf);
+            parent.recomputeChildrenDimensions();
+            debug(`Moved daily note leaf to first position`);
+          }
+        }
+      }
     }
   }
 

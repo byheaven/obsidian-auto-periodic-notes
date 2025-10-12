@@ -2,7 +2,7 @@ import { Notice, Plugin, type PluginManifest, Workspace, WorkspaceLeaf } from 'o
 import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
 import { around } from 'monkey-around';
 import { SETTINGS_UPDATED } from './events';
-import debug from './log';
+import debug, { setDebugEnabled } from './log';
 import NotesProvider from './notes/provider';
 import { applyDefaultSettings, type ISettings } from './settings';
 import AutoPeriodicNotesSettingsTab from './settings/tab';
@@ -60,11 +60,13 @@ export default class AutoPeriodicNotes extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = applyDefaultSettings(await this.loadData());
+    setDebugEnabled(this.settings.debug);
     debug('Loaded settings: ' + JSON.stringify(this.settings));
   }
 
   async updateSettings(settings: ISettings): Promise<void> {
     this.settings = settings;
+    setDebugEnabled(this.settings.debug);
     await this.saveData(this.settings);
     this.onSettingsUpdate();
     debug('Saved settings: ' + JSON.stringify(this.settings));

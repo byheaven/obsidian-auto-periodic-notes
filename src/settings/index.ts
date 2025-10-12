@@ -20,6 +20,7 @@ export interface IDailySettings extends IPeriodicitySettings {
 export interface ISettings {
   alwaysOpen: boolean;
   processTemplater: boolean;
+  debug: boolean;
   daily: IDailySettings;
   weekly: IPeriodicitySettings;
   monthly: IPeriodicitySettings;
@@ -37,6 +38,7 @@ export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze(
 export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   alwaysOpen: false,
   processTemplater: false,
+  debug: false,
   daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false, openAtFirstPosition: false },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
@@ -45,9 +47,32 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
 });
 
 export function applyDefaultSettings(savedSettings: ISettings): ISettings {
-  return Object.assign(
-    {},
-    DEFAULT_SETTINGS,
-    savedSettings
-  );
+  // Perform deep merge to ensure new fields get default values
+  const result: ISettings = {
+    alwaysOpen: savedSettings?.alwaysOpen ?? DEFAULT_SETTINGS.alwaysOpen,
+    processTemplater: savedSettings?.processTemplater ?? DEFAULT_SETTINGS.processTemplater,
+    debug: savedSettings?.debug ?? DEFAULT_SETTINGS.debug,
+    daily: {
+      ...DEFAULT_SETTINGS.daily,
+      ...savedSettings?.daily,
+    },
+    weekly: {
+      ...DEFAULT_SETTINGS.weekly,
+      ...savedSettings?.weekly,
+    },
+    monthly: {
+      ...DEFAULT_SETTINGS.monthly,
+      ...savedSettings?.monthly,
+    },
+    quarterly: {
+      ...DEFAULT_SETTINGS.quarterly,
+      ...savedSettings?.quarterly,
+    },
+    yearly: {
+      ...DEFAULT_SETTINGS.yearly,
+      ...savedSettings?.yearly,
+    },
+  };
+
+  return result;
 }

@@ -1,3 +1,11 @@
+let debugEnabled = false;
+
+export function setDebugEnabled(enabled: boolean): void {
+  debugEnabled = enabled;
+}
+
 export default function debug(msg: string): void {
-  console.debug(`[JH:APN] ${msg}`);
+  if (debugEnabled) {
+    console.debug(`[JH:APN] ${msg}`);
+  }
 }
