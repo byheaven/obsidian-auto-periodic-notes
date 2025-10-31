@@ -23,14 +23,14 @@ export default class NotesProvider {
     debug('Checking if any new notes need to be created');
     this.workspaceLeaves = {};
 
-    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen);
-    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen);
-    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen);
-    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen);
-    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen);
+    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater);
+    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater);
+    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater);
+    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater);
+    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater);
   }
 
-  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean): Promise<void> {
+  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean): Promise<void> {
     if (setting.available && setting.enabled) {
       
       debug(`Checking if ${term} note needs to be created`);
@@ -51,11 +51,14 @@ export default class NotesProvider {
           5000
         );
 
-        // Process Templater commands in the newly created note
-        await processTemplaterInFile(this.app, newNote, true);
-
         await this.handleClose(setting, cls, newNote);
         await this.handleOpen(setting, newNote);
+
+        // Process Templater commands after the note is opened if enabled
+        // This ensures the file is active in the editor when Templater processes it
+        if (processTemplater) {
+          await processTemplaterInFile(this.app, newNote, true);
+        }
 
       } else if (alwaysOpen) {
 
