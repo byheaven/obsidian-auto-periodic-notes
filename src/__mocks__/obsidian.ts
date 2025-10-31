@@ -4,6 +4,8 @@ import * as momentImpl from 'moment';
 export class Plugin {}
 export class PluginSettingTab {}
 
+export const App = jest.fn();
+
 export class TAbstractFile {}
 export class TFile extends TAbstractFile {
   public basename!: string;
