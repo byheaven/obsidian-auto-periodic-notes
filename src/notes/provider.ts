@@ -1,8 +1,9 @@
-import { moment, Notice, type TFile, type WorkspaceLeaf } from 'obsidian';
+import { moment, Notice, type TFile, type WorkspaceLeaf, type App } from 'obsidian';
 import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
 import { DailyNote, MonthlyNote, Note, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
+import { processTemplaterInFile } from '../templater';
 
 const DEFAULT_WAIT_TIMEOUT: number = 1000;
 
@@ -10,9 +11,11 @@ export default class NotesProvider {
   private waitTimeout: number;
   private workspace: ObsidianWorkspace;
   private workspaceLeaves: Record<string, WorkspaceLeaf>;
+  private app: App;
 
-  constructor(workspace: ObsidianWorkspace, waitTimeout?: number) {
+  constructor(workspace: ObsidianWorkspace, app: App, waitTimeout?: number) {
     this.workspace = workspace;
+    this.app = app;
     this.waitTimeout = waitTimeout || DEFAULT_WAIT_TIMEOUT;
   }
 
@@ -47,6 +50,9 @@ export default class NotesProvider {
           `Today's ${term} note has been created.`,
           5000
         );
+
+        // Process Templater commands in the newly created note
+        await processTemplaterInFile(this.app, newNote, true);
 
         await this.handleClose(setting, cls, newNote);
         await this.handleOpen(setting, newNote);
