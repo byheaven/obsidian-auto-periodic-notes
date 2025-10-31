@@ -12,7 +12,12 @@ describe('settings tab', () => {
   let sut: AutoPeriodicNotesSettingsTab;
 
   beforeEach(() => {
-    app = jest.fn() as unknown as App;
+    // Create proper app mock object (not a function)
+    app = {
+      plugins: {
+        plugins: {},
+      },
+    } as unknown as App;
     plugin = jest.fn() as unknown as AutoTasks;
     plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
     containerEl = jest.fn() as unknown as HTMLElement;
@@ -29,6 +34,8 @@ describe('settings tab', () => {
 
     sut = new AutoPeriodicNotesSettingsTab(app, plugin);
     sut.containerEl = containerEl;
+    // Manually set app since the mock PluginSettingTab doesn't do it
+    (sut as any).app = app;
   });
 
   afterEach(() => {
