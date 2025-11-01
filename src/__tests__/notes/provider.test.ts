@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
+import { App, MarkdownView, Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
 import { DailyNote, MonthlyNote, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
 import NotesProvider from '../../notes/provider';
 import type { ISettings } from '../../settings';
@@ -16,6 +16,7 @@ describe('Notes Provider', () => {
   beforeEach(() => {
     settings = {
       alwaysOpen: false,
+      processTemplater: false,
       daily: {
         available: false,
         enabled: false,
@@ -49,7 +50,7 @@ describe('Notes Provider', () => {
       },
     };
 
-    sut = new NotesProvider(new Workspace(), TEST_WAIT_TIMEOUT);
+    sut = new NotesProvider(new Workspace(), new App(), TEST_WAIT_TIMEOUT);
   });
 
   afterEach(() => {
@@ -147,7 +148,7 @@ describe('Notes Provider', () => {
     // Mock Date so moment's logic is untouched
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-19T12:00:00Z').getTime());
 
-    const sut = new NotesProvider(new Workspace());
+    const sut = new NotesProvider(new Workspace(), new App());
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -170,6 +171,108 @@ describe('Notes Provider', () => {
     expect(mockDailyIsPresent).toHaveBeenCalled();
     expect(mockDailyCreate).toHaveBeenCalled();
     expect(Notice).toHaveBeenCalledWith(`Today's daily note has been created.`, 5000);
+  });
+
+  it('processes Templater code when creating new notes and setting is enabled', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.processTemplater = true;
+
+    const newFile = new TFile();
+    newFile.path = 'daily/2025-01-18.md';
+
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(newFile));
+
+    // Mock workspace leaf for Templater
+    const mockLeaf = new WorkspaceLeaf();
+    mockLeaf.openFile = jest.fn().mockResolvedValue(undefined);
+    mockLeaf.detach = jest.fn();
+
+    // Mock the Templater plugin
+    const mockTemplaterPlugin = {
+      settings: {
+        trigger_on_file_creation: false,
+      },
+      templater: {
+        overwrite_active_file_commands: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    // Create a new provider with mocked app that has Templater plugin
+    const mockApp = new App();
+    (mockApp as any).plugins = {
+      plugins: {
+        'templater-obsidian': mockTemplaterPlugin,
+      },
+    };
+    (mockApp as any).workspace = {
+      getActiveFile: jest.fn().mockReturnValue(null),
+      getLeaf: jest.fn().mockReturnValue(mockLeaf),
+    };
+    (mockApp as any).vault = {
+      read: jest.fn().mockResolvedValue('file content'),
+    };
+
+    const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, TEST_WAIT_TIMEOUT);
+
+    await sutWithTemplater.checkAndCreateNotes(settings);
+
+    expect(mockDailyCreate).toHaveBeenCalled();
+    expect(mockTemplaterPlugin.templater.overwrite_active_file_commands).toHaveBeenCalled();
+  });
+
+  it('does not process Templater code when setting is disabled', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.processTemplater = false;
+
+    const newFile = new TFile();
+    newFile.path = 'daily/2025-01-18.md';
+
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<typeof DailyNote.prototype.isPresent>;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<typeof DailyNote.prototype.create>;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(newFile));
+
+    // Mock workspace leaf for Templater
+    const mockLeaf = new WorkspaceLeaf();
+    mockLeaf.openFile = jest.fn().mockResolvedValue(undefined);
+    mockLeaf.detach = jest.fn();
+
+    // Mock the Templater plugin
+    const mockTemplaterPlugin = {
+      settings: {
+        trigger_on_file_creation: false,
+      },
+      templater: {
+        overwrite_active_file_commands: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    // Create a new provider with mocked app that has Templater plugin
+    const mockApp = new App();
+    (mockApp as any).plugins = {
+      plugins: {
+        'templater-obsidian': mockTemplaterPlugin,
+      },
+    };
+    (mockApp as any).workspace = {
+      getActiveFile: jest.fn().mockReturnValue(null),
+      getLeaf: jest.fn().mockReturnValue(mockLeaf),
+    };
+    (mockApp as any).vault = {
+      read: jest.fn().mockResolvedValue('file content'),
+    };
+
+    const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, TEST_WAIT_TIMEOUT);
+
+    await sutWithTemplater.checkAndCreateNotes(settings);
+
+    expect(mockDailyCreate).toHaveBeenCalled();
+    expect(mockTemplaterPlugin.templater.overwrite_active_file_commands).not.toHaveBeenCalled();
   });
 
   it('closes existing notes, but does nothing when none are found', async () => {

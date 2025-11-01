@@ -18,6 +18,7 @@ export interface IDailySettings extends IPeriodicitySettings {
 
 export interface ISettings {
   alwaysOpen: boolean;
+  processTemplater: boolean;
   daily: IDailySettings;
   weekly: IPeriodicitySettings;
   monthly: IPeriodicitySettings;
@@ -34,6 +35,7 @@ export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze(
 
 export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   alwaysOpen: false,
+  processTemplater: false,
   daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false, },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },

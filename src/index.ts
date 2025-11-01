@@ -17,7 +17,7 @@ export default class AutoPeriodicNotes extends Plugin {
 
     this.settings = {} as ISettings;
     this.periodicNotesPlugin = new PeriodicNotesPluginAdapter(app as ObsidianAppWithPlugins);
-    this.notes = new NotesProvider(app.workspace);
+    this.notes = new NotesProvider(app.workspace, app);
   }
 
   async onload(): Promise<void> {

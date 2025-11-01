@@ -44,6 +44,22 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
           });
       });
 
+    // Only show Templater setting if Templater plugin is installed
+    const templaterInstalled = !!(this.app as any).plugins?.plugins?.['templater-obsidian'];
+    if (templaterInstalled) {
+      new Setting(this.containerEl)
+        .setName('Process Templater code in automatically created notes')
+        .setDesc('When enabled, automatically process and remove Templater syntax (like <% tp.file.cursor(0) %>) from notes created in the background. Note: With the current implementation of Templater processing APIs, this leads to a brief creation and then closure of tabs in the UI.')
+        .addToggle((toggle) => {
+          toggle
+            .setValue(settings.processTemplater)
+            .onChange(async (val) => {
+              settings.processTemplater = val;
+              await this.plugin.updateSettings(settings);
+            });
+        });
+    }
+
     for (const periodicity of periodicities) {
       if (settings[periodicity].available) {
         this.containerEl.createEl('h3', { text: `Automatic ${periodicity} notes` });
