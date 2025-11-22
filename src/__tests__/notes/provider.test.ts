@@ -153,13 +153,9 @@ describe('Notes Provider', () => {
     // Mock Date so moment's logic is untouched
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-19T12:00:00Z').getTime());
 
-<<<<<<< HEAD
-    const sut = new NotesProvider(new Workspace(), new App());
-=======
     const mockApp = { workspace: new Workspace() } as any;
     const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
     const sut = new NotesProvider(new Workspace(), mockApp, mockPlugin);
->>>>>>> d0e8b65 (Add option to open daily notes at first tab position)
     await sut.checkAndCreateNotes(settings);
 
     expect(DailyNote).toHaveBeenCalled();
@@ -227,7 +223,8 @@ describe('Notes Provider', () => {
       read: jest.fn().mockResolvedValue('file content'),
     };
 
-    const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, TEST_WAIT_TIMEOUT);
+    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithTemplater.checkAndCreateNotes(settings);
 
@@ -278,7 +275,8 @@ describe('Notes Provider', () => {
       read: jest.fn().mockResolvedValue('file content'),
     };
 
-    const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, TEST_WAIT_TIMEOUT);
+    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithTemplater.checkAndCreateNotes(settings);
 
