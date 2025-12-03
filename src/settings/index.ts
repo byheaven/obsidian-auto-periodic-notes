@@ -15,6 +15,10 @@ export interface IPeriodicitySettings {
 export interface IDailySettings extends IPeriodicitySettings {
   excludeWeekends: boolean;
   openAtFirstPosition: boolean;
+  enableAdvancedScheduling: boolean;
+  scheduledTime: string;
+  createTomorrowsNote: boolean;
+  unpinOldDailyNotes: boolean;
 }
 
 export interface ISettings {
@@ -39,7 +43,15 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   alwaysOpen: false,
   processTemplater: false,
   debug: false,
-  daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false, openAtFirstPosition: false },
+  daily: {
+    ...DEFAULT_PERIODICITY_SETTINGS,
+    excludeWeekends: false,
+    openAtFirstPosition: false,
+    enableAdvancedScheduling: false,
+    scheduledTime: "00:02",
+    createTomorrowsNote: false,
+    unpinOldDailyNotes: false
+  },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
   quarterly: { ...DEFAULT_PERIODICITY_SETTINGS },

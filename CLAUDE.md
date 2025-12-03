@@ -182,3 +182,105 @@ Uses Jest with jsdom environment for testing Obsidian plugin functionality. Mock
 ## Build System
 
 Uses esbuild for fast compilation with TypeScript support. The build process includes TypeScript type checking before bundling.
+
+## Templater Integration
+
+The plugin supports automatic processing of Templater templates in newly created notes via the `processTemplater` global setting.
+
+**Implementation:** `src/templater.ts`
+- Detects if Templater plugin is installed and enabled
+- Only processes templates if Templater's `trigger_on_file_creation` is disabled (to avoid double-processing)
+- Requires file to be active in editor for processing - temporarily opens/closes tab if needed
+- Uses timeouts to ensure Templater API completes before cleanup
+
+**Usage Pattern:**
+```typescript
+if (processTemplater) {
+  await processTemplaterInFile(app, file, force);
+}
+```
+
+## Note Creation Scheduling
+
+The plugin runs note checks on two triggers:
+
+1. **Immediate Check:** On plugin load (after layout ready)
+2. **Daily Scheduled Check:** At 00:02 (2 minutes after midnight) each day
+
+**Implementation:** `src/index.ts:166-183`
+- Uses `scheduleNextDailyCheck()` to calculate time until next midnight
+- Cleans up timeout on plugin unload to prevent memory leaks
+- Runs full check cycle for all note types on each trigger
+
+## Settings Architecture
+
+**Two-Level Settings Structure:**
+
+1. **Global Settings** (apply to all note types):
+   - `alwaysOpen` - Always open notes when created (overrides per-note `openAndPin`)
+   - `processTemplater` - Enable Templater integration
+   - `debug` - Enable debug logging
+
+2. **Per-Periodicity Settings** (daily, weekly, monthly, quarterly, yearly):
+   - `available` - Synced from Periodic Notes plugin (read-only in UI)
+   - `enabled` - User toggle for auto-creation
+   - `closeExisting` - Close older notes of same type
+   - `openAndPin` - Open and pin new notes in tabs
+   - `excludeWeekends` - (Daily only) Skip weekend note creation
+   - `openAtFirstPosition` - (Daily only) Open at first tab position
+
+**Settings Synchronization:**
+The plugin listens for `PERIODIC_NOTES_EVENT_SETTING_UPDATED` events from Periodic Notes plugin and automatically updates the `available` flags to match which note types are configured.
+
+**Default Settings Application:**
+`applyDefaultSettings()` performs deep merge to ensure newly added settings fields get default values when loading saved settings from older plugin versions.
+
+## Debug Mode
+
+Enable debug logging by toggling the "Debug" setting in the settings tab. Debug output uses the `debug()` function from `src/log.ts` and logs to console with `[Auto Periodic Notes]` prefix.
+
+**Common Debug Scenarios:**
+- Tracking note creation flow
+- Verifying monkey patch behavior
+- Monitoring settings synchronization
+- Troubleshooting Templater integration
+
+## Development Workflow
+
+**Local Plugin Testing:**
+1. Symlink plugin to Obsidian plugins directory:
+   ```bash
+   ln -s $(pwd) ~/.obsidian/plugins/auto-periodic-notes
+   ```
+2. Run `npm run dev` to watch for changes
+3. After each rebuild, toggle plugin off/on in Obsidian to reload
+4. Enable Debug mode in settings for detailed logging
+
+**Running Single Test:**
+```bash
+npm test -- src/__tests__/notes/provider.test.ts
+```
+
+**Version Bumping:**
+```bash
+npm run version
+```
+This updates both `manifest.json` and `versions.json` together.
+
+## Coding Conventions
+
+- Use 2-space indentation
+- Prefer `camelCase` for functions/variables, `PascalCase` for classes
+- Use `debug()` helper from `src/log.ts` instead of `console.log`
+- Keep imports sorted: core APIs, third-party packages, local modules
+- Place test files in `src/__tests__/` with `.test.ts` suffix
+- Mock Obsidian APIs using `src/__mocks__/obsidian.ts`
+
+## Pull Request Guidelines
+
+Before submitting a PR:
+1. Run `npm run build` and `npm run test` to ensure all checks pass
+2. Link related issues in PR description
+3. Include screenshots for UI changes
+4. Document any changes to default automation behavior
+5. Ensure all 23+ existing tests pass

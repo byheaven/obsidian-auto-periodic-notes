@@ -14,7 +14,10 @@ export default class AutoPeriodicNotes extends Plugin {
   private notes: NotesProvider;
   private monkeyPatchCleanup?: () => void;
   private isDailyNoteCreation: boolean = false;
-  private dailyCheckTimeout: number | null = null;
+  private scheduledTimeouts: Record<string, number | null> = {
+    mainDailyCheck: null,
+    customScheduledTime: null
+  };
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
@@ -52,10 +55,10 @@ export default class AutoPeriodicNotes extends Plugin {
     // Add the settings tab
     this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this));
 
-    // Perform an immediate check, then schedule the daily run at 00:02
-    this.notes.checkAndCreateNotes(this.settings);
-    this.scheduleNextDailyCheck();
-    this.register(this.clearDailyCheckTimeout.bind(this));
+    // Perform an immediate check with startup context, then schedule BOTH daily checks
+    this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
+    this.scheduleAllDailyChecks();
+    this.register(this.clearAllScheduledTimeouts.bind(this));
   }
 
   async loadSettings(): Promise<void> {
@@ -65,10 +68,21 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   async updateSettings(settings: ISettings): Promise<void> {
+    const customScheduleChanged =
+      this.settings.daily.scheduledTime !== settings.daily.scheduledTime ||
+      this.settings.daily.enableAdvancedScheduling !== settings.daily.enableAdvancedScheduling;
+
     this.settings = settings;
     setDebugEnabled(this.settings.debug);
     await this.saveData(this.settings);
     this.onSettingsUpdate();
+
+    // Only reschedule the affected timeout
+    if (customScheduleChanged) {
+      debug('Custom schedule settings changed, rescheduling custom time only...');
+      this.scheduleCustomScheduledTime();
+    }
+
     debug('Saved settings: ' + JSON.stringify(this.settings));
   }
 
@@ -163,29 +177,80 @@ export default class AutoPeriodicNotes extends Plugin {
     this.isDailyNoteCreation = isCreating;
   }
 
-  private scheduleNextDailyCheck(): void {
-    this.clearDailyCheckTimeout();
+  private scheduleMainDailyCheck(): void {
+    this.clearScheduledTimeout('mainDailyCheck');
 
     const now = new Date();
     const nextRun = new Date(now);
-    nextRun.setHours(0, 2, 0, 0);
+    nextRun.setHours(0, 2, 0, 0); // Always 00:02
 
     if (nextRun <= now) {
       nextRun.setDate(nextRun.getDate() + 1);
     }
 
     const delay = nextRun.getTime() - now.getTime();
+    debug(`[mainDailyCheck] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
 
-    this.dailyCheckTimeout = window.setTimeout(async () => {
-      this.notes.checkAndCreateNotes(this.settings);
-      this.scheduleNextDailyCheck();
+    this.scheduledTimeouts.mainDailyCheck = window.setTimeout(async () => {
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'mainDailyCheck' });
+      this.scheduleMainDailyCheck(); // Reschedule itself
     }, delay);
   }
 
-  private clearDailyCheckTimeout(): void {
-    if (this.dailyCheckTimeout !== null) {
-      window.clearTimeout(this.dailyCheckTimeout);
-      this.dailyCheckTimeout = null;
+  private scheduleCustomScheduledTime(): void {
+    const dailySettings = this.settings.daily;
+
+    // Only schedule if enabled AND has valid time
+    if (!dailySettings.enableAdvancedScheduling || !dailySettings.scheduledTime) {
+      this.clearScheduledTimeout('customScheduledTime');
+      return;
     }
+
+    this.clearScheduledTimeout('customScheduledTime');
+
+    const now = new Date();
+    const nextRun = new Date(now);
+    const [hours, minutes] = this.parseScheduledTime(dailySettings.scheduledTime);
+    nextRun.setHours(hours, minutes, 0, 0);
+
+    if (nextRun <= now) {
+      nextRun.setDate(nextRun.getDate() + 1);
+    }
+
+    const delay = nextRun.getTime() - now.getTime();
+    debug(`[customScheduledTime] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
+
+    this.scheduledTimeouts.customScheduledTime = window.setTimeout(async () => {
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'customScheduledTime' });
+      this.scheduleCustomScheduledTime(); // Reschedule itself
+    }, delay);
+  }
+
+  private scheduleAllDailyChecks(): void {
+    this.scheduleMainDailyCheck();
+    this.scheduleCustomScheduledTime();
+  }
+
+  private parseScheduledTime(timeString: string): [number, number] {
+    const match = timeString.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!match) {
+      debug(`Invalid scheduled time: ${timeString}, using 00:02`);
+      return [0, 2];
+    }
+    return [parseInt(match[1], 10), parseInt(match[2], 10)];
+  }
+
+  private clearScheduledTimeout(name: string): void {
+    if (this.scheduledTimeouts[name] !== null) {
+      window.clearTimeout(this.scheduledTimeouts[name]!);
+      this.scheduledTimeouts[name] = null;
+      debug(`Cleared timeout: ${name}`);
+    }
+  }
+
+  private clearAllScheduledTimeouts(): void {
+    Object.keys(this.scheduledTimeouts).forEach(name => {
+      this.clearScheduledTimeout(name);
+    });
   }
 }

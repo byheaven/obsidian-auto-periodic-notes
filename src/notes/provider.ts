@@ -3,10 +3,15 @@ import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
 import { DailyNote, MonthlyNote, Note, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
+import { createDailyNote, getDailyNote, getAllDailyNotes } from 'obsidian-daily-notes-interface';
 import { processTemplaterInFile } from '../templater';
 import type AutoPeriodicNotes from '../index';
 
 const DEFAULT_WAIT_TIMEOUT: number = 1000;
+
+export interface CheckContext {
+  scheduleName?: 'mainDailyCheck' | 'customScheduledTime' | 'startup';
+}
 
 export default class NotesProvider {
   private waitTimeout: number;
@@ -22,56 +27,144 @@ export default class NotesProvider {
     this.waitTimeout = waitTimeout || DEFAULT_WAIT_TIMEOUT;
   }
 
-  async checkAndCreateNotes(settings: ISettings): Promise<void> {
-    debug('Checking if any new notes need to be created');
+  async checkAndCreateNotes(settings: ISettings, context?: CheckContext): Promise<void> {
+    debug(`Checking if any new notes need to be created (context: ${context?.scheduleName || 'manual'})`);
 
-    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater);
-    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater);
-    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater);
-    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater);
-    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater);
+    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context);
+    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context);
+    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context);
+    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context);
+    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context);
   }
 
-  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean): Promise<void> {
+  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean, context?: CheckContext): Promise<void> {
     if (setting.available && setting.enabled) {
       // Clear workspace leaves cache to get fresh state for this note check
       // This prevents stale "ghost" leaves from affecting our checks
       this.workspaceLeaves = {};
 
       debug(`Checking if ${term} note needs to be created`);
-      if (!cls.isPresent()) {
 
-        if (term === 'daily' && (setting as IDailySettings).excludeWeekends) {
-          const today = moment();
-          if (today.format('dd') === 'Sa' || today.format('dd') === 'Su') {
-            debug('Not creating new note as it is a weekend');
-            return;
+      // Special handling for daily notes with advanced features
+      if (term === 'daily') {
+        const dailySettings = setting as IDailySettings;
+
+        // Determine which behavior to use based on context
+        const isCustomScheduledTime = context?.scheduleName === 'customScheduledTime';
+        const useAdvancedPath = isCustomScheduledTime || dailySettings.createTomorrowsNote || dailySettings.unpinOldDailyNotes;
+
+        if (useAdvancedPath) {
+          // Use obsidian-daily-notes-interface for date-specific operations
+          let targetDate = moment();
+
+          // Only create tomorrow's note if this is the custom scheduled time AND createTomorrowsNote is enabled
+          if (isCustomScheduledTime && dailySettings.createTomorrowsNote) {
+            targetDate = targetDate.add(1, 'day');
+
+            // Skip weekends if excludeWeekends enabled
+            if (dailySettings.excludeWeekends) {
+              while (targetDate.format('dd') === 'Sa' || targetDate.format('dd') === 'Su') {
+                targetDate = targetDate.add(1, 'day');
+              }
+            }
+
+            debug(`Target date for custom scheduled time: ${targetDate.format('YYYY-MM-DD')}`);
+          } else if (dailySettings.excludeWeekends) {
+            // Check weekends for today's note
+            const dayOfWeek = targetDate.format('dd');
+            if (dayOfWeek === 'Sa' || dayOfWeek === 'Su') {
+              debug('Not creating new note as it is a weekend');
+              return;
+            }
+          }
+
+          // Check if note exists for target date
+          const allDailyNotes = getAllDailyNotes();
+          const existingNote = getDailyNote(targetDate, allDailyNotes);
+
+          if (!existingNote) {
+            // Create the note for target date
+            debug(`Creating daily note for ${targetDate.format('YYYY-MM-DD')}`);
+            const newNote = await createDailyNote(targetDate);
+
+            new Notice(
+              isCustomScheduledTime && dailySettings.createTomorrowsNote
+                ? `Tomorrow's daily note has been created.`
+                : `Today's daily note has been created.`,
+              5000
+            );
+
+            // Behavior differentiation: use unpin ONLY for custom scheduled time
+            if (isCustomScheduledTime && dailySettings.unpinOldDailyNotes) {
+              await this.handleUnpin(setting, cls, newNote);
+            } else {
+              await this.handleClose(setting, cls, newNote);
+            }
+
+            await this.handleOpen(setting, newNote, term);
+
+            if (processTemplater) {
+              await processTemplaterInFile(this.app, newNote, true);
+            }
+          } else if (alwaysOpen || (isCustomScheduledTime && dailySettings.unpinOldDailyNotes)) {
+            // Note exists, but we should still open/pin it
+            debug(`Daily note exists for ${targetDate.format('YYYY-MM-DD')}, opening it`);
+
+            if (isCustomScheduledTime && dailySettings.unpinOldDailyNotes) {
+              await this.handleUnpin(setting, cls, existingNote);
+            } else {
+              await this.handleClose(setting, cls, existingNote);
+            }
+
+            await this.handleOpen(setting, existingNote, term);
+          }
+        } else {
+          // Use original path for backward compatibility
+          if (!cls.isPresent()) {
+            if (dailySettings.excludeWeekends) {
+              const today = moment();
+              if (today.format('dd') === 'Sa' || today.format('dd') === 'Su') {
+                debug('Not creating new note as it is a weekend');
+                return;
+              }
+            }
+
+            debug(`Creating new ${term} note`);
+            const newNote: TFile = await cls.create();
+            new Notice(`Today's ${term} note has been created.`, 5000);
+
+            await this.handleClose(setting, cls, newNote);
+            await this.handleOpen(setting, newNote, term);
+
+            if (processTemplater) {
+              await processTemplaterInFile(this.app, newNote, true);
+            }
+          } else if (alwaysOpen) {
+            debug(`Set to always open notes, getting current ${term} note`);
+            const existingNote: TFile = cls.getCurrent();
+            await this.handleClose(setting, cls, existingNote);
+            await this.handleOpen(setting, existingNote, term);
           }
         }
+      } else {
+        // Non-daily notes: use original logic
+        if (!cls.isPresent()) {
+          debug(`Creating new ${term} note`);
+          const newNote: TFile = await cls.create();
+          new Notice(`Today's ${term} note has been created.`, 5000);
 
-        debug(`Creating new ${term} note`);
-        const newNote: TFile = await cls.create();
-        new Notice(
-          `Today's ${term} note has been created.`,
-          5000
-        );
+          await this.handleClose(setting, cls, newNote);
+          await this.handleOpen(setting, newNote, term);
 
-        await this.handleClose(setting, cls, newNote);
-        await this.handleOpen(setting, newNote, term);
-
-        // Process Templater commands after the note is opened if enabled
-        // This ensures the file is active in the editor when Templater processes it
-        if (processTemplater) {
-          await processTemplaterInFile(this.app, newNote, true);
+          if (processTemplater) {
+            await processTemplaterInFile(this.app, newNote, true);
+          }
+        } else if (alwaysOpen) {
+          debug(`Set to always open notes, getting current ${term} note`);
+          const existingNote: TFile = cls.getCurrent();
+          await this.handleClose(setting, cls, existingNote);
+          await this.handleOpen(setting, existingNote, term);
         }
-
-      } else if (alwaysOpen) {
-
-        debug(`Set to always open notes, getting current ${term} note and checking if it needs to be opened`);
-        const existingNote: TFile = cls.getCurrent();
-
-        await this.handleClose(setting, cls, existingNote);
-        await this.handleOpen(setting, existingNote, term);
       }
 
     }
@@ -120,6 +213,28 @@ export default class NotesProvider {
 
       // Ensure that it waits a second for the new tab to have been created if ALL existing leaves have been detached
       await new Promise(resolve => setTimeout(resolve, this.waitTimeout));
+    }
+  }
+
+  private async handleUnpin(setting: IPeriodicitySettings, cls: Note, newNote: TFile): Promise<void> {
+    const dailySettings = setting as IDailySettings;
+    if (dailySettings.unpinOldDailyNotes) {
+      debug('Unpinning all old daily notes');
+
+      const existingNotes = cls.getAllPaths();
+      const toUnpin: WorkspaceLeaf[] = [];
+
+      Object.entries(this.getOpenWorkspaceLeaves()).forEach(([file, leaf]) => {
+        // Unpin all daily notes except the new one
+        if (existingNotes.indexOf(file) > -1 && file !== newNote.path) {
+          toUnpin.push(leaf);
+        }
+      });
+
+      debug(`Found ${toUnpin.length} daily note tab(s) to unpin`);
+      for (const leaf of toUnpin) {
+        leaf.setPinned(false);
+      }
     }
   }
 

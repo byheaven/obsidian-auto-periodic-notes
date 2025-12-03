@@ -5,6 +5,19 @@ import type { ISettings } from '../../settings';
 
 jest.mock('obsidian');
 jest.mock('obsidian-periodic-notes-provider');
+jest.mock('obsidian-daily-notes-interface', () => ({
+  getAllDailyNotes: jest.fn().mockReturnValue({}),
+  getDailyNote: jest.fn().mockReturnValue(null),
+  createDailyNote: jest.fn().mockImplementation(() => {
+    const mockFile = {
+      path: 'daily-note.md',
+      name: 'daily-note.md',
+      basename: 'daily-note',
+      extension: 'md',
+    } as TFile;
+    return Promise.resolve(mockFile);
+  }),
+}));
 
 const TEST_WAIT_TIMEOUT: number = 10;
 
@@ -26,6 +39,10 @@ describe('Notes Provider', () => {
         openAndPin: false,
         excludeWeekends: false,
         openAtFirstPosition: false,
+        enableAdvancedScheduling: false,
+        scheduledTime: "00:02",
+        createTomorrowsNote: false,
+        unpinOldDailyNotes: false,
       },
       weekly: {
         available: false,
