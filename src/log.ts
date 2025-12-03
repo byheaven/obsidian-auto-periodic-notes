@@ -6,6 +6,6 @@ export function setDebugEnabled(enabled: boolean): void {
 
 export default function debug(msg: string): void {
   if (debugEnabled) {
-    console.debug(`[JH:APN] ${msg}`);
+    console.log(`[Auto Periodic Notes] ${msg}`);
   }
 }

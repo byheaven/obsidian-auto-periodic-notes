@@ -200,8 +200,11 @@ export default class AutoPeriodicNotes extends Plugin {
   private scheduleCustomScheduledTime(): void {
     const dailySettings = this.settings.daily;
 
+    debug(`[customScheduledTime] Checking settings: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${dailySettings.scheduledTime}`);
+
     // Only schedule if enabled AND has valid time
     if (!dailySettings.enableAdvancedScheduling || !dailySettings.scheduledTime) {
+      debug(`[customScheduledTime] Not scheduling - conditions not met`);
       this.clearScheduledTimeout('customScheduledTime');
       return;
     }
