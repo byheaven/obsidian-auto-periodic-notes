@@ -11,6 +11,14 @@ describe('settings tab', () => {
 
   let sut: AutoPeriodicNotesSettingsTab;
 
+  // Helper to create a mock element that supports nested createEl/createDiv calls
+  const createMockElement = (): any => {
+    const mockEl: any = jest.fn();
+    mockEl.createDiv = jest.fn(() => createMockElement());
+    mockEl.createEl = jest.fn(() => createMockElement());
+    return mockEl;
+  };
+
   beforeEach(() => {
     // Create proper app mock object (not a function)
     app = {
@@ -20,17 +28,8 @@ describe('settings tab', () => {
     } as unknown as App;
     plugin = jest.fn() as unknown as AutoTasks;
     plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
-    containerEl = jest.fn() as unknown as HTMLElement;
-    containerEl.createDiv = jest.fn();
-    containerEl.createEl = jest.fn();
+    containerEl = createMockElement() as unknown as HTMLElement;
     containerEl.empty = jest.fn();
-    const divEl = jest.fn() as unknown as HTMLDivElement;
-    divEl.createDiv = jest.fn();
-    divEl.createEl = jest.fn();
-    jest.spyOn(divEl, 'createDiv').mockReturnValue(jest.fn() as unknown as HTMLDivElement);
-    jest.spyOn(divEl, 'createEl').mockReturnValue(jest.fn() as unknown as HTMLElement);
-    jest.spyOn(containerEl, 'createDiv').mockReturnValue(divEl);
-    jest.spyOn(containerEl, 'createEl').mockReturnValue(jest.fn() as unknown as HTMLElement);
 
     sut = new AutoPeriodicNotesSettingsTab(app, plugin);
     sut.containerEl = containerEl;
