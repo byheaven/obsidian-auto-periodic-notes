@@ -221,9 +221,22 @@ export default class AutoPeriodicNotes extends Plugin {
     }
 
     const delay = nextRun.getTime() - now.getTime();
+    const targetTime = nextRun.getTime();
     debug(`[customScheduledTime] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
 
     this.scheduledTimeouts.customScheduledTime = window.setTimeout(async () => {
+      // Validate that we're within a reasonable window of the target time
+      // This prevents false triggers after system sleep/wake cycles
+      const currentTime = Date.now();
+      const timeDiff = Math.abs(currentTime - targetTime);
+      const TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes tolerance
+
+      if (timeDiff > TOLERANCE_MS) {
+        debug(`[customScheduledTime] Skipped - triggered ${Math.round(timeDiff / 1000 / 60)}min away from target (likely sleep recovery)`);
+        this.scheduleCustomScheduledTime(); // Reschedule to the correct next time
+        return;
+      }
+
       await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'customScheduledTime' });
       this.scheduleCustomScheduledTime(); // Reschedule itself
     }, delay);
