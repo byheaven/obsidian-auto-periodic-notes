@@ -106,17 +106,25 @@ export default class NotesProvider {
             if (processTemplater) {
               await processTemplaterInFile(this.app, newNote, true);
             }
-          } else if (alwaysOpen || (isCustomScheduledTime && dailySettings.unpinOldDailyNotes)) {
-            // Note exists, but we should still open/pin it
-            debug(`Daily note exists for ${targetDate.format('YYYY-MM-DD')}, opening it`);
+          } else {
+            // Note already exists - check if we need to handle existing tabs
+            const isMainDailyCheckOrStartup = context?.scheduleName === 'mainDailyCheck' || context?.scheduleName === 'startup';
+            const shouldCloseOldNotes = isMainDailyCheckOrStartup && setting.closeExisting;
+            const shouldUnpinOldNotes = isCustomScheduledTime && dailySettings.unpinOldDailyNotes;
+            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || shouldUnpinOldNotes;
 
-            if (isCustomScheduledTime && dailySettings.unpinOldDailyNotes) {
-              await this.handleUnpin(setting, cls, existingNote);
-            } else {
-              await this.handleClose(setting, cls, existingNote);
+            if (shouldHandleTabs) {
+              debug(`Daily note exists for ${targetDate.format('YYYY-MM-DD')}, handling existing tabs`);
+
+              if (shouldUnpinOldNotes) {
+                await this.handleUnpin(setting, cls, existingNote);
+              } else if (shouldCloseOldNotes) {
+                await this.handleClose(setting, cls, existingNote);
+              }
+
+              // Open and pin today's note (for mainDailyCheck/startup with closeExisting, or alwaysOpen)
+              await this.handleOpen(setting, existingNote, term);
             }
-
-            await this.handleOpen(setting, existingNote, term);
           }
         } else {
           // Use original path for backward compatibility
@@ -192,26 +200,24 @@ export default class NotesProvider {
     return this.workspaceLeaves;
   }
 
-  private async handleClose(setting: IPeriodicitySettings, cls: Note, newNote: TFile): Promise<void> {
+  private async handleClose(setting: IPeriodicitySettings, cls: Note, currentNote: TFile): Promise<void> {
     if (setting.closeExisting) {
       debug('Checking for any existing notes to close');
       const existingNotes = cls.getAllPaths();
       const toDetach: WorkspaceLeaf[] = [];
       Object.entries(this.getOpenWorkspaceLeaves()).forEach(([file, leaf]) => {
-        if (existingNotes.indexOf(file) > -1) {
+        // Close all periodic notes except the current one
+        if (existingNotes.indexOf(file) > -1 && file !== currentNote.path) {
           toDetach.push(leaf);
         }
       });
 
-      // Ensure that it won't close anything if the new note is already open - this is to protect against ongoing workspace management
-      if (Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1) {
-        debug('Found ' + toDetach.length + ' tab(s) to close');
-        for (const leaf of toDetach) {
-          leaf.detach();
-        }
+      debug('Found ' + toDetach.length + ' tab(s) to close');
+      for (const leaf of toDetach) {
+        leaf.detach();
       }
 
-      // Ensure that it waits a second for the new tab to have been created if ALL existing leaves have been detached
+      // Wait for workspace to settle
       await new Promise(resolve => setTimeout(resolve, this.waitTimeout));
     }
   }

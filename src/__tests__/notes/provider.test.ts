@@ -324,7 +324,7 @@ describe('Notes Provider', () => {
     expect(mockIterateAllLeaves).toHaveBeenCalled();
   });
 
-  it('does not close existing notes when the new note is already open', async () => {
+  it('closes old notes but keeps the current note open', async () => {
     settings.daily.available = true;
     settings.daily.enabled = true;
     settings.daily.closeExisting = true;
@@ -362,7 +362,8 @@ describe('Notes Provider', () => {
     expect(DailyNote).toHaveBeenCalled();
     expect(mockDailyGetAllPaths).toHaveBeenCalled();
     expect(mockIterateAllLeaves).toHaveBeenCalled();
-    expect(mockWorkspaceLeafDetach).not.toHaveBeenCalled();
+    // Should close old daily note (leaves[2]) but NOT the current one (leaves[3])
+    expect(mockWorkspaceLeafDetach).toHaveBeenCalledTimes(1);
   });
 
   it('closes existing notes, only closing those that are matched', async () => {
