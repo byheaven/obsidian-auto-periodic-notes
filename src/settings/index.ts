@@ -16,9 +16,13 @@ export interface IDailySettings extends IPeriodicitySettings {
   excludeWeekends: boolean;
   openAtFirstPosition: boolean;
   enableAdvancedScheduling: boolean;
-  scheduledTime: string;
+  scheduledTime: string;  // Default/fallback time, device-specific times are in deviceSettings
   createTomorrowsNote: boolean;
   unpinOldDailyNotes: boolean;
+}
+
+export interface IDeviceSettings {
+  scheduledTime: string;  // Device-specific scheduled time (HH:mm)
 }
 
 export interface ISettings {
@@ -30,6 +34,7 @@ export interface ISettings {
   monthly: IPeriodicitySettings;
   quarterly: IPeriodicitySettings;
   yearly: IPeriodicitySettings;
+  deviceSettings: Record<string, IDeviceSettings>;  // Keyed by hostname
 }
 
 export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze({
@@ -56,6 +61,7 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
   quarterly: { ...DEFAULT_PERIODICITY_SETTINGS },
   yearly: { ...DEFAULT_PERIODICITY_SETTINGS },
+  deviceSettings: {},
 });
 
 export function applyDefaultSettings(savedSettings: ISettings): ISettings {
@@ -84,6 +90,7 @@ export function applyDefaultSettings(savedSettings: ISettings): ISettings {
       ...DEFAULT_SETTINGS.yearly,
       ...savedSettings?.yearly,
     },
+    deviceSettings: savedSettings?.deviceSettings ?? {},
   };
 
   return result;

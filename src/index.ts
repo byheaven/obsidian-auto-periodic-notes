@@ -1,6 +1,7 @@
 import { Notice, Plugin, type PluginManifest, Workspace, WorkspaceLeaf } from 'obsidian';
 import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
 import { around } from 'monkey-around';
+import * as os from 'os';
 import { SETTINGS_UPDATED } from './events';
 import debug, { setDebugEnabled } from './log';
 import NotesProvider from './notes/provider';
@@ -68,8 +69,8 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   async updateSettings(settings: ISettings): Promise<void> {
-    const customScheduleChanged =
-      this.settings.daily.scheduledTime !== settings.daily.scheduledTime ||
+    // Check if advanced scheduling toggle changed (device-specific time changes are handled by setDeviceScheduledTime)
+    const advancedSchedulingChanged =
       this.settings.daily.enableAdvancedScheduling !== settings.daily.enableAdvancedScheduling;
 
     this.settings = settings;
@@ -77,9 +78,9 @@ export default class AutoPeriodicNotes extends Plugin {
     await this.saveData(this.settings);
     this.onSettingsUpdate();
 
-    // Only reschedule the affected timeout
-    if (customScheduleChanged) {
-      debug('Custom schedule settings changed, rescheduling custom time only...');
+    // Reschedule if advanced scheduling was toggled
+    if (advancedSchedulingChanged) {
+      debug('Advanced scheduling setting changed, rescheduling custom time...');
       this.scheduleCustomScheduledTime();
     }
 
@@ -177,6 +178,36 @@ export default class AutoPeriodicNotes extends Plugin {
     this.isDailyNoteCreation = isCreating;
   }
 
+  // Get unique device identifier based on hostname
+  public getDeviceId(): string {
+    return os.hostname();
+  }
+
+  // Get device-specific scheduled time, falling back to global setting
+  public getDeviceScheduledTime(): string {
+    const deviceId = this.getDeviceId();
+    return this.settings.deviceSettings?.[deviceId]?.scheduledTime
+      ?? this.settings.daily.scheduledTime
+      ?? '';
+  }
+
+  // Set device-specific scheduled time
+  public async setDeviceScheduledTime(time: string): Promise<void> {
+    const deviceId = this.getDeviceId();
+    if (!this.settings.deviceSettings) {
+      this.settings.deviceSettings = {};
+    }
+    if (!this.settings.deviceSettings[deviceId]) {
+      this.settings.deviceSettings[deviceId] = { scheduledTime: '' };
+    }
+    this.settings.deviceSettings[deviceId].scheduledTime = time;
+    await this.saveData(this.settings);
+
+    // Reschedule custom time with new device-specific time
+    debug(`Device ${deviceId} scheduled time changed to ${time}, rescheduling...`);
+    this.scheduleCustomScheduledTime();
+  }
+
   private scheduleMainDailyCheck(): void {
     this.clearScheduledTimeout('mainDailyCheck');
 
@@ -199,11 +230,14 @@ export default class AutoPeriodicNotes extends Plugin {
 
   private scheduleCustomScheduledTime(): void {
     const dailySettings = this.settings.daily;
+    // Use device-specific scheduled time
+    const scheduledTime = this.getDeviceScheduledTime();
+    const deviceId = this.getDeviceId();
 
-    debug(`[customScheduledTime] Checking settings: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${dailySettings.scheduledTime}`);
+    debug(`[customScheduledTime] Checking settings for device ${deviceId}: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
 
     // Only schedule if enabled AND has valid time
-    if (!dailySettings.enableAdvancedScheduling || !dailySettings.scheduledTime) {
+    if (!dailySettings.enableAdvancedScheduling || !scheduledTime) {
       debug(`[customScheduledTime] Not scheduling - conditions not met`);
       this.clearScheduledTimeout('customScheduledTime');
       return;
@@ -213,7 +247,7 @@ export default class AutoPeriodicNotes extends Plugin {
 
     const now = new Date();
     const nextRun = new Date(now);
-    const [hours, minutes] = this.parseScheduledTime(dailySettings.scheduledTime);
+    const [hours, minutes] = this.parseScheduledTime(scheduledTime);
     nextRun.setHours(hours, minutes, 0, 0);
 
     if (nextRun <= now) {

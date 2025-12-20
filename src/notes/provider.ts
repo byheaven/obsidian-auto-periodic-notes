@@ -111,7 +111,8 @@ export default class NotesProvider {
             const isMainDailyCheckOrStartup = context?.scheduleName === 'mainDailyCheck' || context?.scheduleName === 'startup';
             const shouldCloseOldNotes = isMainDailyCheckOrStartup && setting.closeExisting;
             const shouldUnpinOldNotes = isCustomScheduledTime && dailySettings.unpinOldDailyNotes;
-            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || shouldUnpinOldNotes;
+            // Always handle tabs for customScheduledTime so that the note gets opened even if it already exists
+            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || shouldUnpinOldNotes || isCustomScheduledTime;
 
             if (shouldHandleTabs) {
               debug(`Daily note exists for ${targetDate.format('YYYY-MM-DD')}, handling existing tabs`);

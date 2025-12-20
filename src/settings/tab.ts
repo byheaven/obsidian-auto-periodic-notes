@@ -190,18 +190,21 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
 
     // Show dependent settings only if advanced scheduling is enabled
     if (settings.daily.enableAdvancedScheduling) {
+      // Get device-specific scheduled time
+      const deviceId = this.plugin.getDeviceId();
+      const deviceScheduledTime = this.plugin.getDeviceScheduledTime();
+
       new Setting(advancedContainer)
-        .setName('Scheduled time')
-        .setDesc('Time for the custom check (24-hour format, e.g., 22:30).')
+        .setName(`Scheduled time (${deviceId})`)
+        .setDesc('Time for the custom check (24-hour format). This setting is device-specific and will not affect other devices.')
         .addText((text) => {
           text
             .setPlaceholder('HH:mm (e.g., 22:30)')
-            .setValue(settings.daily.scheduledTime)
+            .setValue(deviceScheduledTime)
             .onChange(async (val) => {
               const isValid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(val);
               if (isValid || val === '') {
-                settings.daily.scheduledTime = val || '00:02';
-                await this.plugin.updateSettings(settings);
+                await this.plugin.setDeviceScheduledTime(val || '00:02');
               } else {
                 new Notice('Invalid time format. Use HH:mm (e.g., 22:30)');
               }

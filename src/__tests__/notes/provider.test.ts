@@ -68,6 +68,7 @@ describe('Notes Provider', () => {
         closeExisting: false,
         openAndPin: false,
       },
+      deviceSettings: {},
     };
 
     const mockApp = { workspace: new Workspace() } as any;
