@@ -3,7 +3,7 @@ import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
 import { DailyNote, MonthlyNote, Note, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
-import { createDailyNote, getDailyNote, getAllDailyNotes } from 'obsidian-daily-notes-interface';
+import { createDailyNote, getDailyNote, getAllDailyNotes, getDailyNoteSettings, DEFAULT_DAILY_NOTE_FORMAT } from 'obsidian-daily-notes-interface';
 import { processTemplaterInFile } from '../templater';
 import type AutoPeriodicNotes from '../index';
 
@@ -80,7 +80,24 @@ export default class NotesProvider {
 
           // Check if note exists for target date
           const allDailyNotes = getAllDailyNotes();
-          const existingNote = getDailyNote(targetDate, allDailyNotes);
+          let existingNote = getDailyNote(targetDate, allDailyNotes);
+
+          // Fallback: if cache doesn't have the note, check filesystem directly
+          // This handles synced files that haven't been indexed yet
+          if (!existingNote) {
+            const noteSettings = getDailyNoteSettings();
+            const format = noteSettings.format || DEFAULT_DAILY_NOTE_FORMAT;
+            const folder = noteSettings.folder?.trim() || '';
+            const filename = targetDate.format(format);
+            const filepath = folder ? `${folder}/${filename}.md` : `${filename}.md`;
+
+            const file = this.app.vault.getAbstractFileByPath(filepath);
+            // Check if file exists and is a file (not a folder) - use duck typing for test compatibility
+            if (file && 'path' in file && (file as TFile).path?.endsWith('.md')) {
+              debug(`Note not in cache but exists in filesystem: ${filepath}`);
+              existingNote = file as TFile;
+            }
+          }
 
           if (!existingNote) {
             // Create the note for target date

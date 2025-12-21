@@ -17,6 +17,12 @@ jest.mock('obsidian-daily-notes-interface', () => ({
     } as TFile;
     return Promise.resolve(mockFile);
   }),
+  getDailyNoteSettings: jest.fn().mockReturnValue({
+    folder: 'daily',
+    format: 'YYYY-MM-DD',
+    template: '',
+  }),
+  DEFAULT_DAILY_NOTE_FORMAT: 'YYYY-MM-DD',
 }));
 
 const TEST_WAIT_TIMEOUT: number = 10;
@@ -555,5 +561,71 @@ describe('Notes Provider', () => {
     expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
     expect(mockSetPinned).toHaveBeenCalled();
   });
-  
+
+  it('opens synced file via filesystem fallback when not in cache (customScheduledTime)', async () => {
+    // This tests the scenario where a file was synced from another device
+    // but hasn't been indexed by Obsidian's metadata cache yet
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.openAndPin = true;
+    settings.daily.enableAdvancedScheduling = true;
+    // Don't use createTomorrowsNote to avoid timezone issues in tests
+    settings.daily.createTomorrowsNote = false;
+
+    // Mock Date to a specific date (use noon to avoid timezone issues)
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-20T12:00:00Z').getTime());
+
+    // The synced file that exists on filesystem but not in cache (today's note)
+    // Create with proper path property
+    const syncedFile = {
+      path: 'daily/2025-01-20.md',
+      name: '2025-01-20.md',
+      basename: '2025-01-20',
+      extension: 'md',
+    } as TFile;
+
+    // getDailyNote returns null (not in cache), getDailyNoteSettings returns settings
+    const { getDailyNote, createDailyNote, getDailyNoteSettings } = require('obsidian-daily-notes-interface');
+    getDailyNote.mockReturnValue(null);
+    getDailyNoteSettings.mockReturnValue({
+      folder: 'daily',
+      format: 'YYYY-MM-DD',
+      template: '',
+    });
+
+    // Create mock app with vault that can find the file
+    const mockVaultGetAbstractFileByPath = jest.fn().mockImplementation((path: string) => {
+      if (path === 'daily/2025-01-20.md') {
+        return syncedFile;
+      }
+      return null;
+    });
+    const mockApp = {
+      workspace: new Workspace(),
+      vault: {
+        getAbstractFileByPath: mockVaultGetAbstractFileByPath,
+      },
+    } as any;
+
+    const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+    mockOpenFile.mockImplementation(() => Promise.resolve());
+    const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+    mockSetPinned.mockImplementation(() => {});
+    const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+    mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const sutWithVault = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
+
+    await sutWithVault.checkAndCreateNotes(settings, { scheduleName: 'customScheduledTime' });
+
+    // Should find the file via filesystem fallback
+    expect(mockVaultGetAbstractFileByPath).toHaveBeenCalledWith('daily/2025-01-20.md');
+    // Should NOT create a new file since it exists on filesystem
+    expect(createDailyNote).not.toHaveBeenCalled();
+    // Should open the synced file
+    expect(mockOpenFile).toHaveBeenCalledWith(syncedFile);
+    expect(mockSetPinned).toHaveBeenCalled();
+  });
+
 });
