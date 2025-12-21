@@ -201,6 +201,7 @@ export default class AutoPeriodicNotes extends Plugin {
     }
     this.settings.deviceSettings[deviceId].scheduledTime = time;
     await this.saveData(this.settings);
+    this.onSettingsUpdate();
 
     // Reschedule custom time with new device-specific time
     debug(`Device ${deviceId} scheduled time changed to ${time}, rescheduling...`);

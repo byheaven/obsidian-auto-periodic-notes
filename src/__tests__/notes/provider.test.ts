@@ -87,7 +87,6 @@ describe('Notes Provider', () => {
   });
 
   it('does not create notes when nothing is available', async () => {
-    console.log(YearlyNote);
     const spyYearlyIsPresent = jest.spyOn(YearlyNote.prototype, 'isPresent');
     const spyQuarterlyIsPresent = jest.spyOn(QuarterlyNote.prototype, 'isPresent');
     const spyMonthlyIsPresent = jest.spyOn(MonthlyNote.prototype, 'isPresent');

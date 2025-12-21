@@ -25,6 +25,7 @@ export default class NotesProvider {
     this.app = app;
     this.plugin = plugin;
     this.waitTimeout = waitTimeout || DEFAULT_WAIT_TIMEOUT;
+    this.workspaceLeaves = {};
   }
 
   async checkAndCreateNotes(settings: ISettings, context?: CheckContext): Promise<void> {
