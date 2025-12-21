@@ -204,7 +204,7 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
             .onChange(async (val) => {
               const isValid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(val);
               if (isValid || val === '') {
-                await this.plugin.setDeviceScheduledTime(val || '00:02');
+                await this.plugin.setDeviceScheduledTime(val || '22:00');
               } else {
                 new Notice('Invalid time format. Use HH:mm (e.g., 22:30)');
               }

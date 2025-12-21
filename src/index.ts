@@ -57,7 +57,12 @@ export default class AutoPeriodicNotes extends Plugin {
     this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this));
 
     // Perform an immediate check with startup context, then schedule BOTH daily checks
-    this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
+    this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' })
+      .catch(error => {
+        debug(`Error during startup check: ${error.message}`);
+        console.error('Auto Periodic Notes: Failed to create notes on startup', error);
+        new Notice('Auto Periodic Notes: Failed to create notes on startup. Check console for details.');
+      });
     this.scheduleAllDailyChecks();
     this.register(this.clearAllScheduledTimeouts.bind(this));
   }
@@ -69,20 +74,14 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   async updateSettings(settings: ISettings): Promise<void> {
-    // Check if advanced scheduling toggle changed (device-specific time changes are handled by setDeviceScheduledTime)
-    const advancedSchedulingChanged =
-      this.settings.daily.enableAdvancedScheduling !== settings.daily.enableAdvancedScheduling;
-
     this.settings = settings;
     setDebugEnabled(this.settings.debug);
     await this.saveData(this.settings);
     this.onSettingsUpdate();
 
-    // Reschedule if advanced scheduling was toggled
-    if (advancedSchedulingChanged) {
-      debug('Advanced scheduling setting changed, rescheduling custom time...');
-      this.scheduleCustomScheduledTime();
-    }
+    // Always reschedule custom time when settings change
+    // scheduleCustomScheduledTime() is idempotent and self-disabling
+    this.scheduleCustomScheduledTime();
 
     debug('Saved settings: ' + JSON.stringify(this.settings));
   }
@@ -223,8 +222,16 @@ export default class AutoPeriodicNotes extends Plugin {
     debug(`[mainDailyCheck] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
 
     this.scheduledTimeouts.mainDailyCheck = window.setTimeout(async () => {
-      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'mainDailyCheck' });
-      this.scheduleMainDailyCheck(); // Reschedule itself
+      try {
+        await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'mainDailyCheck' });
+      } catch (error) {
+        debug(`Error in mainDailyCheck: ${error.message}`);
+        console.error('Auto Periodic Notes: Failed during main daily check', error);
+        new Notice('Auto Periodic Notes: Failed to create daily notes. Check console for details.');
+      } finally {
+        // Always reschedule, even if there was an error
+        this.scheduleMainDailyCheck();
+      }
     }, delay);
   }
 
@@ -239,6 +246,13 @@ export default class AutoPeriodicNotes extends Plugin {
     // Only schedule if enabled AND has valid time
     if (!dailySettings.enableAdvancedScheduling || !scheduledTime) {
       debug(`[customScheduledTime] Not scheduling - conditions not met`);
+      this.clearScheduledTimeout('customScheduledTime');
+      return;
+    }
+
+    // Avoid conflict with main daily check at 00:02
+    if (scheduledTime === '00:02') {
+      debug(`[customScheduledTime] Not scheduling - conflicts with main daily check at 00:02`);
       this.clearScheduledTimeout('customScheduledTime');
       return;
     }
@@ -259,20 +273,28 @@ export default class AutoPeriodicNotes extends Plugin {
     debug(`[customScheduledTime] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
 
     this.scheduledTimeouts.customScheduledTime = window.setTimeout(async () => {
-      // Validate that we're within a reasonable window of the target time
-      // This prevents false triggers after system sleep/wake cycles
-      const currentTime = Date.now();
-      const timeDiff = Math.abs(currentTime - targetTime);
-      const TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes tolerance
+      try {
+        // Validate that we're within a reasonable window of the target time
+        // This prevents false triggers after system sleep/wake cycles
+        const currentTime = Date.now();
+        const timeDiff = Math.abs(currentTime - targetTime);
+        const TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes tolerance
 
-      if (timeDiff > TOLERANCE_MS) {
-        debug(`[customScheduledTime] Skipped - triggered ${Math.round(timeDiff / 1000 / 60)}min away from target (likely sleep recovery)`);
-        this.scheduleCustomScheduledTime(); // Reschedule to the correct next time
-        return;
+        if (timeDiff > TOLERANCE_MS) {
+          debug(`[customScheduledTime] Skipped - triggered ${Math.round(timeDiff / 1000 / 60)}min away from target (likely sleep recovery)`);
+          this.scheduleCustomScheduledTime(); // Reschedule to the correct next time
+          return;
+        }
+
+        await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'customScheduledTime' });
+      } catch (error) {
+        debug(`Error in customScheduledTime: ${error.message}`);
+        console.error('Auto Periodic Notes: Failed during custom scheduled check', error);
+        new Notice('Auto Periodic Notes: Failed to create notes at scheduled time. Check console for details.');
+      } finally {
+        // Always reschedule, even if there was an error
+        this.scheduleCustomScheduledTime();
       }
-
-      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'customScheduledTime' });
-      this.scheduleCustomScheduledTime(); // Reschedule itself
     }, delay);
   }
 

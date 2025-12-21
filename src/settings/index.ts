@@ -53,7 +53,7 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
     excludeWeekends: false,
     openAtFirstPosition: false,
     enableAdvancedScheduling: false,
-    scheduledTime: "00:02",
+    scheduledTime: "22:00",
     createTomorrowsNote: false,
     unpinOldDailyNotes: false
   },
