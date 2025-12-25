@@ -21,7 +21,7 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
       'quarterly',
       'yearly',
     ];
-  
+
     if (!settings.daily.available && !settings.weekly.available && !settings.monthly.available && !settings.quarterly.available && !settings.yearly.available) {
       const bannerEl = this.containerEl.createDiv({ cls: 'settings-banner' });
 
@@ -146,7 +146,7 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
       .setName(`Close older ${periodicity} notes`)
       .setDesc(
         isDaily
-          ? 'Close older open daily notes at 00:02 or on startup (not at custom scheduled time).'
+          ? 'Close older open daily notes on startup (not at custom scheduled time).'
           : `Automatically close any older open ${periodicity} notes.`
       )
       .addToggle((toggle) => {
@@ -167,7 +167,7 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
   private renderDailyAdvancedSection(settings: ISettings): void {
     // Create collapsible section using native HTML details element
     const detailsEl = this.containerEl.createEl('details', { cls: 'setting-item-details' });
-    detailsEl.createEl('summary', { 
+    detailsEl.createEl('summary', {
       text: 'Advanced: Custom Scheduled Time',
       cls: 'setting-item-heading'
     });

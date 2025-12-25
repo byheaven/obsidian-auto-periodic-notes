@@ -57,6 +57,7 @@ export default class AutoPeriodicNotes extends Plugin {
 
     // Perform an immediate check with startup context, then schedule BOTH daily checks
     this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' })
+      .then(() => this.checkMissedScheduledTaskOnStartup())
       .catch(error => {
         debug(`Error during startup check: ${error.message}`);
         console.error('Auto Periodic Notes: Failed to create notes on startup', error);
@@ -244,12 +245,7 @@ export default class AutoPeriodicNotes extends Plugin {
       return;
     }
 
-    // Avoid conflict with main daily check at 00:02
-    if (scheduledTime === '00:02') {
-      debug(`[scheduledTime] Not scheduling - conflicts with main daily check at 00:02`);
-      this.clearScheduledTimeout('scheduledTime');
-      return;
-    }
+
 
     // Validate time format before parsing
     const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -382,17 +378,12 @@ export default class AutoPeriodicNotes extends Plugin {
     const todayString = now.toISOString().split('T')[0]; // YYYY-MM-DD
 
     try {
-      console.log(`[Auto Periodic Notes] Executing scheduled task at ${now.toLocaleTimeString()}`);
+      console.log(`[Auto Periodic Notes] Executing scheduled task at ${now.toLocaleTimeString()} (${isOnTime ? 'on-time' : 'late'})`);
 
-      if (isOnTime) {
-        // On-time execution: create next period notes
-        console.log('[Auto Periodic Notes] On-time execution: creating next period notes');
-        await this.notes.checkAndCreateNextPeriodNotes(this.settings, { scheduleName: 'scheduledTime' });
-      } else {
-        // Late execution: create current period notes
-        console.log('[Auto Periodic Notes] Late execution: creating current period notes');
-        await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'lateExecution' });
-      }
+      // Both on-time and late execution: create next period notes with scheduledTime context
+      // This ensures consistent behavior: always create tomorrow's note and unpin old notes
+      console.log('[Auto Periodic Notes] Creating next period notes (tomorrow)');
+      await this.notes.checkAndCreateNextPeriodNotes(this.settings, { scheduleName: 'scheduledTime' });
 
       // Mark execution date and persist to settings
       await this.setLastExecutionDate(todayString);
@@ -406,10 +397,55 @@ export default class AutoPeriodicNotes extends Plugin {
     }
   }
 
+  /**
+   * Check if scheduled task was missed on startup (e.g., Obsidian restarted after scheduled time).
+   * If so, execute the task now.
+   */
+  private async checkMissedScheduledTaskOnStartup(): Promise<void> {
+    if (!this.settings.daily.enableAdvancedScheduling) {
+      debug('[Startup Recovery] Advanced scheduling not enabled, skipping');
+      return;
+    }
+
+    const scheduledTime = this.getDeviceScheduledTime();
+    if (!scheduledTime) {
+      debug('[Startup Recovery] No scheduled time configured, skipping');
+      return;
+    }
+
+    const now = new Date();
+    const todayString = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const [hours, minutes] = this.parseScheduledTime(scheduledTime);
+
+    // Build today's target time
+    const todayTarget = new Date(now);
+    todayTarget.setHours(hours, minutes, 0, 0);
+
+    const currentTime = now.getTime();
+    const targetTime = todayTarget.getTime();
+
+    debug(`[Startup Recovery] Checking: now=${now.toISOString()}, target=${todayTarget.toISOString()}, lastExecution=${this.getLastExecutionDate()}`);
+
+    // Only recover if current time is after scheduled time AND not executed today
+    if (currentTime > targetTime) {
+      const lastExecution = this.getLastExecutionDate();
+      if (lastExecution !== todayString) {
+        debug('[Startup Recovery] Missed scheduled task detected, executing now');
+        console.log(`[Auto Periodic Notes] Startup recovery: missed scheduled time ${scheduledTime}, executing now...`);
+
+        await this.executeCustomScheduledTask(false);
+      } else {
+        debug('[Startup Recovery] Already executed today, skipping');
+      }
+    } else {
+      debug('[Startup Recovery] Before scheduled time, no recovery needed');
+    }
+  }
+
   private parseScheduledTime(timeString: string): [number, number] {
     const match = timeString.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
     if (!match) {
-      debug(`Invalid scheduled time: ${timeString}, using 00:02`);
+      debug(`Invalid scheduled time: ${timeString}, using default 00:00`);
       return [0, 2];
     }
     return [parseInt(match[1], 10), parseInt(match[2], 10)];
