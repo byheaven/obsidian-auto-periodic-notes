@@ -16,8 +16,7 @@ export default class AutoPeriodicNotes extends Plugin {
   private monkeyPatchCleanup?: () => void;
   private isDailyNoteCreation: boolean = false;
   private scheduledTimeouts: Record<string, number | null> = {
-    mainDailyCheck: null,
-    customScheduledTime: null
+    scheduledTime: null
   };
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
@@ -65,6 +64,9 @@ export default class AutoPeriodicNotes extends Plugin {
       });
     this.scheduleAllDailyChecks();
     this.register(this.clearAllScheduledTimeouts.bind(this));
+
+    // Set up Visibility API listener to detect sleep/wake recovery
+    this.setupVisibilityListener();
   }
 
   async loadSettings(): Promise<void> {
@@ -80,8 +82,8 @@ export default class AutoPeriodicNotes extends Plugin {
     this.onSettingsUpdate();
 
     // Always reschedule custom time when settings change
-    // scheduleCustomScheduledTime() is idempotent and self-disabling
-    this.scheduleCustomScheduledTime();
+    // scheduleDailyCheck() is idempotent and self-disabling
+    this.scheduleDailyCheck();
 
     debug('Saved settings: ' + JSON.stringify(this.settings));
   }
@@ -205,68 +207,59 @@ export default class AutoPeriodicNotes extends Plugin {
 
     // Reschedule custom time with new device-specific time
     debug(`Device ${deviceId} scheduled time changed to ${time}, rescheduling...`);
-    this.scheduleCustomScheduledTime();
+    this.scheduleDailyCheck();
   }
 
-  private scheduleMainDailyCheck(): void {
-    this.clearScheduledTimeout('mainDailyCheck');
+  // Get device-specific last execution date
+  private getLastExecutionDate(): string | null {
+    const deviceId = this.getDeviceId();
+    return this.settings.deviceSettings?.[deviceId]?.lastExecutionDate ?? null;
+  }
 
-    const now = new Date();
-    const nextRun = new Date(now);
-    nextRun.setHours(0, 2, 0, 0); // Always 00:02
-
-    if (nextRun <= now) {
-      nextRun.setDate(nextRun.getDate() + 1);
+  // Set device-specific last execution date
+  private async setLastExecutionDate(date: string): Promise<void> {
+    const deviceId = this.getDeviceId();
+    if (!this.settings.deviceSettings) {
+      this.settings.deviceSettings = {};
     }
-
-    const delay = nextRun.getTime() - now.getTime();
-    debug(`[mainDailyCheck] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
-
-    this.scheduledTimeouts.mainDailyCheck = window.setTimeout(async () => {
-      try {
-        await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'mainDailyCheck' });
-      } catch (error) {
-        debug(`Error in mainDailyCheck: ${error.message}`);
-        console.error('Auto Periodic Notes: Failed during main daily check', error);
-        new Notice('Auto Periodic Notes: Failed to create daily notes. Check console for details.');
-      } finally {
-        // Always reschedule, even if there was an error
-        this.scheduleMainDailyCheck();
-      }
-    }, delay);
+    if (!this.settings.deviceSettings[deviceId]) {
+      this.settings.deviceSettings[deviceId] = { scheduledTime: '' };
+    }
+    this.settings.deviceSettings[deviceId].lastExecutionDate = date;
+    await this.saveData(this.settings);
   }
 
-  private scheduleCustomScheduledTime(): void {
+  private scheduleDailyCheck(): void {
     const dailySettings = this.settings.daily;
     // Use device-specific scheduled time
     const scheduledTime = this.getDeviceScheduledTime();
     const deviceId = this.getDeviceId();
 
-    debug(`[customScheduledTime] Checking settings for device ${deviceId}: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
+    debug(`[scheduledTime] Checking settings for device ${deviceId}: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
 
     // Only schedule if enabled AND has valid time
     if (!dailySettings.enableAdvancedScheduling || !scheduledTime) {
-      debug(`[customScheduledTime] Not scheduling - conditions not met`);
-      this.clearScheduledTimeout('customScheduledTime');
+      debug(`[scheduledTime] Not scheduling - conditions not met`);
+      this.clearScheduledTimeout('scheduledTime');
       return;
     }
 
     // Avoid conflict with main daily check at 00:02
     if (scheduledTime === '00:02') {
-      debug(`[customScheduledTime] Not scheduling - conflicts with main daily check at 00:02`);
-      this.clearScheduledTimeout('customScheduledTime');
+      debug(`[scheduledTime] Not scheduling - conflicts with main daily check at 00:02`);
+      this.clearScheduledTimeout('scheduledTime');
       return;
     }
 
     // Validate time format before parsing
     const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
     if (!TIME_REGEX.test(scheduledTime)) {
-      debug(`[customScheduledTime] Not scheduling - invalid time format: ${scheduledTime}`);
-      this.clearScheduledTimeout('customScheduledTime');
+      debug(`[scheduledTime] Not scheduling - invalid time format: ${scheduledTime}`);
+      this.clearScheduledTimeout('scheduledTime');
       return;
     }
 
-    this.clearScheduledTimeout('customScheduledTime');
+    this.clearScheduledTimeout('scheduledTime');
 
     const now = new Date();
     const nextRun = new Date(now);
@@ -279,9 +272,9 @@ export default class AutoPeriodicNotes extends Plugin {
 
     const delay = nextRun.getTime() - now.getTime();
     const targetTime = nextRun.getTime();
-    debug(`[customScheduledTime] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
+    debug(`[scheduledTime] Scheduled for ${nextRun.toISOString()} (in ${delay}ms)`);
 
-    this.scheduledTimeouts.customScheduledTime = window.setTimeout(async () => {
+    this.scheduledTimeouts.scheduledTime = window.setTimeout(async () => {
       try {
         // Validate that we're within a reasonable window of the target time
         // This prevents false triggers after system sleep/wake cycles
@@ -290,26 +283,127 @@ export default class AutoPeriodicNotes extends Plugin {
         const TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes tolerance
 
         if (timeDiff > TOLERANCE_MS) {
-          debug(`[customScheduledTime] Skipped - triggered ${Math.round(timeDiff / 1000 / 60)}min away from target (likely sleep recovery)`);
-          this.scheduleCustomScheduledTime(); // Reschedule to the correct next time
+          debug(`[scheduledTime] Skipped - triggered ${Math.round(timeDiff / 1000 / 60)}min away from target (likely sleep recovery)`);
+          this.scheduleDailyCheck(); // Reschedule to the correct next time
           return;
         }
 
-        await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'customScheduledTime' });
+        // On-time execution: create next period notes
+        await this.executeCustomScheduledTask(true);
       } catch (error) {
-        debug(`Error in customScheduledTime: ${error.message}`);
+        debug(`Error in scheduledTime: ${error.message}`);
         console.error('Auto Periodic Notes: Failed during custom scheduled check', error);
         new Notice('Auto Periodic Notes: Failed to create notes at scheduled time. Check console for details.');
       } finally {
         // Always reschedule, even if there was an error
-        this.scheduleCustomScheduledTime();
+        this.scheduleDailyCheck();
       }
     }, delay);
   }
 
   private scheduleAllDailyChecks(): void {
-    this.scheduleMainDailyCheck();
-    this.scheduleCustomScheduledTime();
+    this.scheduleDailyCheck();
+  }
+
+  private setupVisibilityListener(): void {
+    debug('[Visibility] Setting up visibility change listener');
+
+    const handleVisibilityChange = async () => {
+      if (!document.hidden) {
+        // Window changed from hidden to visible
+        debug('[Visibility] Window became visible, checking for missed schedules');
+        console.log('[Auto Periodic Notes] Window became visible, checking scheduled tasks...');
+
+        await this.onWindowBecameVisible();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    this.register(() => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      debug('[Visibility] Visibility listener removed');
+    });
+
+    debug('[Visibility] Visibility listener registered');
+  }
+
+  private async onWindowBecameVisible(): Promise<void> {
+    // Only handle cases where advanced scheduling is enabled
+    if (!this.settings.daily.enableAdvancedScheduling) {
+      debug('[Visibility] Advanced scheduling not enabled, skipping');
+      return;
+    }
+
+    const scheduledTime = this.getDeviceScheduledTime();
+    if (!scheduledTime) {
+      debug('[Visibility] No scheduled time configured, skipping');
+      return;
+    }
+
+    const now = new Date();
+    const todayString = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const [hours, minutes] = this.parseScheduledTime(scheduledTime);
+
+    // Build today's target time
+    const todayTarget = new Date(now);
+    todayTarget.setHours(hours, minutes, 0, 0);
+
+    const currentTime = now.getTime();
+    const targetTime = todayTarget.getTime();
+
+    debug(`[Visibility] Checking: now=${now.toISOString()}, target=${todayTarget.toISOString()}, lastExecution=${this.getLastExecutionDate()}`);
+
+    if (currentTime < targetTime) {
+      // Case 1: Current time is before the scheduled time
+      // Ensure timeout is correctly scheduled (reschedule to prevent being interrupted by sleep)
+      debug('[Visibility] Before scheduled time, ensuring timeout is set');
+      console.log(`[Auto Periodic Notes] Before scheduled time ${scheduledTime}, rescheduling...`);
+
+      this.scheduleDailyCheck();
+    } else {
+      // Case 2: Current time is after the scheduled time
+      // Check if it has already been executed today
+      const lastExecution = this.getLastExecutionDate();
+      if (lastExecution !== todayString) {
+        debug('[Visibility] After scheduled time and not executed today, triggering now');
+        console.log(`[Auto Periodic Notes] Missed scheduled time ${scheduledTime}, executing now...`);
+
+        // Late execution: create current period notes
+        await this.executeCustomScheduledTask(false);
+      } else {
+        debug('[Visibility] After scheduled time but already executed today, skipping');
+        console.log(`[Auto Periodic Notes] Already executed today at ${scheduledTime}, skipping`);
+      }
+    }
+  }
+
+  private async executeCustomScheduledTask(isOnTime: boolean = true): Promise<void> {
+    const now = new Date();
+    const todayString = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    try {
+      console.log(`[Auto Periodic Notes] Executing scheduled task at ${now.toLocaleTimeString()}`);
+
+      if (isOnTime) {
+        // On-time execution: create next period notes
+        console.log('[Auto Periodic Notes] On-time execution: creating next period notes');
+        await this.notes.checkAndCreateNextPeriodNotes(this.settings, { scheduleName: 'scheduledTime' });
+      } else {
+        // Late execution: create current period notes
+        console.log('[Auto Periodic Notes] Late execution: creating current period notes');
+        await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'lateExecution' });
+      }
+
+      // Mark execution date and persist to settings
+      await this.setLastExecutionDate(todayString);
+      debug(`[Execution] Marked and persisted execution date: ${todayString}`);
+
+      console.log(`[Auto Periodic Notes] Scheduled task completed successfully`);
+    } catch (error) {
+      debug(`Error during scheduled task: ${error.message}`);
+      console.error('Auto Periodic Notes: Failed to execute scheduled task', error);
+      new Notice('Auto Periodic Notes: Failed to create notes. Check console for details.');
+    }
   }
 
   private parseScheduledTime(timeString: string): [number, number] {

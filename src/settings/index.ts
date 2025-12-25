@@ -23,6 +23,7 @@ export interface IDailySettings extends IPeriodicitySettings {
 
 export interface IDeviceSettings {
   scheduledTime: string;  // Device-specific scheduled time (HH:mm)
+  lastExecutionDate?: string;  // Last execution date (YYYY-MM-DD) for this device
 }
 
 export interface ISettings {

@@ -561,7 +561,7 @@ describe('Notes Provider', () => {
     expect(mockSetPinned).toHaveBeenCalled();
   });
 
-  it('opens synced file via filesystem fallback when not in cache (customScheduledTime)', async () => {
+  it('opens synced file via filesystem fallback when not in cache (scheduledTime)', async () => {
     // This tests the scenario where a file was synced from another device
     // but hasn't been indexed by Obsidian's metadata cache yet
     settings.daily.available = true;
@@ -616,7 +616,7 @@ describe('Notes Provider', () => {
     const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
     const sutWithVault = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
-    await sutWithVault.checkAndCreateNotes(settings, { scheduleName: 'customScheduledTime' });
+    await sutWithVault.checkAndCreateNotes(settings, { scheduleName: 'scheduledTime' });
 
     // Should find the file via filesystem fallback
     expect(mockVaultGetAbstractFileByPath).toHaveBeenCalledWith('daily/2025-01-20.md');

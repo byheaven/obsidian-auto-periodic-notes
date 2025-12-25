@@ -10,7 +10,7 @@ import type AutoPeriodicNotes from '../index';
 const DEFAULT_WAIT_TIMEOUT: number = 1000;
 
 export interface CheckContext {
-  scheduleName?: 'mainDailyCheck' | 'customScheduledTime' | 'startup';
+  scheduleName?: 'scheduledTime' | 'lateExecution' | 'startup';
 }
 
 export default class NotesProvider {
@@ -38,7 +38,17 @@ export default class NotesProvider {
     await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context);
   }
 
-  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean, context?: CheckContext): Promise<void> {
+  async checkAndCreateNextPeriodNotes(settings: ISettings, context?: CheckContext): Promise<void> {
+    debug(`Creating next period notes (context: ${context?.scheduleName || 'manual'})`);
+
+    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context, true);
+    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context, true);
+    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context, true);
+    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context, true);
+    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context, true);
+  }
+
+  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean, context?: CheckContext, nextPeriod: boolean = false): Promise<void> {
     if (setting.available && setting.enabled) {
       // Clear workspace leaves cache to get fresh state for this note check
       // This prevents stale "ghost" leaves from affecting our checks
@@ -51,15 +61,27 @@ export default class NotesProvider {
         const dailySettings = setting as IDailySettings;
 
         // Determine which behavior to use based on context
-        const isCustomScheduledTime = context?.scheduleName === 'customScheduledTime';
-        const useAdvancedPath = isCustomScheduledTime || dailySettings.createTomorrowsNote || dailySettings.unpinOldDailyNotes;
+        const isScheduledTime = context?.scheduleName === 'scheduledTime';
+        const useAdvancedPath = isScheduledTime || nextPeriod || dailySettings.createTomorrowsNote || dailySettings.unpinOldDailyNotes;
 
         if (useAdvancedPath) {
           // Use obsidian-daily-notes-interface for date-specific operations
           let targetDate = moment();
 
-          // Only create tomorrow's note if this is the custom scheduled time AND createTomorrowsNote is enabled
-          if (isCustomScheduledTime && dailySettings.createTomorrowsNote) {
+          // Apply next period offset if requested
+          if (nextPeriod) {
+            targetDate = targetDate.add(1, 'day');
+
+            // Skip weekends if excludeWeekends enabled
+            if (dailySettings.excludeWeekends) {
+              while (targetDate.format('dd') === 'Sa' || targetDate.format('dd') === 'Su') {
+                targetDate = targetDate.add(1, 'day');
+              }
+            }
+
+            debug(`Target date for next period: ${targetDate.format('YYYY-MM-DD')}`);
+          } else if (isScheduledTime && dailySettings.createTomorrowsNote) {
+            // Legacy: Only create tomorrow's note if this is the custom scheduled time AND createTomorrowsNote is enabled
             targetDate = targetDate.add(1, 'day');
 
             // Skip weekends if excludeWeekends enabled
@@ -105,15 +127,20 @@ export default class NotesProvider {
             debug(`Creating daily note for ${targetDate.format('YYYY-MM-DD')}`);
             const newNote = await createDailyNote(targetDate);
 
+            // Determine if this is a future-dated note (tomorrow or later)
+            // Check if targetDate is after today at the day level
+            const today = moment();
+            const isFutureNote = targetDate.isAfter(today, 'day');
+
             new Notice(
-              isCustomScheduledTime && dailySettings.createTomorrowsNote
+              isFutureNote
                 ? `Tomorrow's daily note has been created.`
                 : `Today's daily note has been created.`,
               5000
             );
 
             // Behavior differentiation: use unpin ONLY for custom scheduled time
-            if (isCustomScheduledTime && dailySettings.unpinOldDailyNotes) {
+            if (isScheduledTime && dailySettings.unpinOldDailyNotes) {
               await this.handleUnpin(setting, cls, newNote);
             } else {
               await this.handleClose(setting, cls, newNote);
@@ -126,11 +153,11 @@ export default class NotesProvider {
             }
           } else {
             // Note already exists - check if we need to handle existing tabs
-            const isMainDailyCheckOrStartup = context?.scheduleName === 'mainDailyCheck' || context?.scheduleName === 'startup';
-            const shouldCloseOldNotes = isMainDailyCheckOrStartup && setting.closeExisting;
-            const shouldUnpinOldNotes = isCustomScheduledTime && dailySettings.unpinOldDailyNotes;
-            // Always handle tabs for customScheduledTime so that the note gets opened even if it already exists
-            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || shouldUnpinOldNotes || isCustomScheduledTime;
+            const isStartup = context?.scheduleName === 'startup';
+            const shouldCloseOldNotes = isStartup && setting.closeExisting;
+            const shouldUnpinOldNotes = isScheduledTime && dailySettings.unpinOldDailyNotes;
+            // Always handle tabs for scheduledTime so that the note gets opened even if it already exists
+            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || shouldUnpinOldNotes || isScheduledTime;
 
             if (shouldHandleTabs) {
               debug(`Daily note exists for ${targetDate.format('YYYY-MM-DD')}, handling existing tabs`);
@@ -141,7 +168,7 @@ export default class NotesProvider {
                 await this.handleClose(setting, cls, existingNote);
               }
 
-              // Open and pin today's note (for mainDailyCheck/startup with closeExisting, or alwaysOpen)
+              // Open and pin today's note (for startup with closeExisting, or alwaysOpen)
               await this.handleOpen(setting, existingNote, term);
             }
           }
@@ -174,11 +201,16 @@ export default class NotesProvider {
           }
         }
       } else {
-        // Non-daily notes: use original logic
+        // Non-daily notes
+        // Note: The obsidian-periodic-notes-provider library doesn't support creating
+        // notes for future periods (next week, next month, etc.) directly.
+        // For now, we create the current period note if it doesn't exist.
+        // TODO: Implement manual file creation for future period notes
         if (!cls.isPresent()) {
+          const periodLabel = nextPeriod ? `Current ${term}` : `Today's ${term}`;
           debug(`Creating new ${term} note`);
           const newNote: TFile = await cls.create();
-          new Notice(`Today's ${term} note has been created.`, 5000);
+          new Notice(`${periodLabel} note has been created.`, 5000);
 
           await this.handleClose(setting, cls, newNote);
           await this.handleOpen(setting, newNote, term);
