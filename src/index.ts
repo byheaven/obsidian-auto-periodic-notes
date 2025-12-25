@@ -55,13 +55,12 @@ export default class AutoPeriodicNotes extends Plugin {
     // Add the settings tab
     this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this));
 
-    // Perform an immediate check with startup context, then schedule BOTH daily checks
-    this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' })
-      .then(() => this.checkMissedScheduledTaskOnStartup())
+    // Execute appropriate startup logic based on current time vs scheduled time
+    this.executeStartupLogic()
       .catch(error => {
-        debug(`Error during startup check: ${error.message}`);
-        console.error('Auto Periodic Notes: Failed to create notes on startup', error);
-        new Notice('Auto Periodic Notes: Failed to create notes on startup. Check console for details.');
+        debug(`Error during startup: ${error.message}`);
+        console.error('Auto Periodic Notes: Failed during startup', error);
+        new Notice('Auto Periodic Notes: Failed during startup. Check console for details.');
       });
     this.scheduleAllDailyChecks();
     this.register(this.clearAllScheduledTimeouts.bind(this));
@@ -398,23 +397,26 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   /**
-   * Check if scheduled task was missed on startup (e.g., Obsidian restarted after scheduled time).
-   * If so, execute the task now.
+   * Execute appropriate startup logic based on current time vs scheduled time.
+   * - Before scheduled time: run today's startup logic (create today's note)
+   * - After scheduled time: run scheduled task logic (create tomorrow's note + unpin old)
    */
-  private async checkMissedScheduledTaskOnStartup(): Promise<void> {
+  private async executeStartupLogic(): Promise<void> {
+    // If advanced scheduling is not enabled, always use today's startup logic
     if (!this.settings.daily.enableAdvancedScheduling) {
-      debug('[Startup Recovery] Advanced scheduling not enabled, skipping');
+      debug('[Startup] Advanced scheduling not enabled, using today startup logic');
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
       return;
     }
 
     const scheduledTime = this.getDeviceScheduledTime();
     if (!scheduledTime) {
-      debug('[Startup Recovery] No scheduled time configured, skipping');
+      debug('[Startup] No scheduled time configured, using today startup logic');
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
       return;
     }
 
     const now = new Date();
-    const todayString = now.toISOString().split('T')[0]; // YYYY-MM-DD
     const [hours, minutes] = this.parseScheduledTime(scheduledTime);
 
     // Build today's target time
@@ -424,21 +426,18 @@ export default class AutoPeriodicNotes extends Plugin {
     const currentTime = now.getTime();
     const targetTime = todayTarget.getTime();
 
-    debug(`[Startup Recovery] Checking: now=${now.toISOString()}, target=${todayTarget.toISOString()}, lastExecution=${this.getLastExecutionDate()}`);
+    debug(`[Startup] Checking: now=${now.toISOString()}, scheduledTime=${scheduledTime}, target=${todayTarget.toISOString()}`);
 
-    // Only recover if current time is after scheduled time AND not executed today
     if (currentTime > targetTime) {
-      const lastExecution = this.getLastExecutionDate();
-      if (lastExecution !== todayString) {
-        debug('[Startup Recovery] Missed scheduled task detected, executing now');
-        console.log(`[Auto Periodic Notes] Startup recovery: missed scheduled time ${scheduledTime}, executing now...`);
-
-        await this.executeCustomScheduledTask(false);
-      } else {
-        debug('[Startup Recovery] Already executed today, skipping');
-      }
+      // After scheduled time: directly run scheduled task logic
+      debug('[Startup] After scheduled time, executing scheduled task directly');
+      console.log(`[Auto Periodic Notes] Startup after ${scheduledTime}, creating tomorrow's note...`);
+      await this.executeCustomScheduledTask(false);
     } else {
-      debug('[Startup Recovery] Before scheduled time, no recovery needed');
+      // Before scheduled time: run today's startup logic
+      debug('[Startup] Before scheduled time, using today startup logic');
+      console.log(`[Auto Periodic Notes] Startup before ${scheduledTime}, creating today's note...`);
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
     }
   }
 

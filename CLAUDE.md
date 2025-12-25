@@ -209,8 +209,10 @@ The plugin now uses a **single user-configurable scheduled time** instead of mul
 **Scheduling Triggers:**
 
 1. **Startup Check** - On plugin load (after layout ready)
-   - Creates **current period** notes for all enabled types
-   - Uses `checkAndCreateNotes(context: { scheduleName: 'startup' })`
+   - Behavior depends on current time vs scheduled time:
+     - **Before scheduled time**: Creates **current period** notes (today's daily note)
+     - **After scheduled time**: Creates **next period** notes (tomorrow's daily note + unpin old)
+   - Uses `executeStartupLogic()` to determine which path to take
 
 2. **User-Configured Daily Check** - At user's specified time (e.g., 22:30)
    - Creates **next period** notes for all enabled types
@@ -218,14 +220,15 @@ The plugin now uses a **single user-configurable scheduled time** instead of mul
    - Weekly/Monthly/Quarterly/Yearly: Current period (library limitation*)
    - Uses `checkAndCreateNextPeriodNotes(context: { scheduleName: 'scheduledTime' })`
 
-3. **Late Execution Recovery** - After missed scheduled time (via Visibility API)
-   - Creates **current period** notes for all enabled types
-   - Triggered when window becomes visible after scheduled time
-   - Uses `checkAndCreateNotes(context: { scheduleName: 'lateExecution' })`
+3. **Sleep/Wake Recovery** - After missed scheduled time (via Visibility API)
+   - Triggered when window becomes visible after scheduled time AND not executed today
+   - Creates **next period** notes (same as scheduled task)
+   - Uses `lastExecutionDate` to prevent duplicate execution
 
 **Implementation:** `src/index.ts`
+- `executeStartupLogic()` - Branches based on current time vs scheduled time
 - `scheduleDailyCheck()` - Calculates delay until next scheduled time
-- `executeCustomScheduledTask(isOnTime)` - Executes with context awareness
+- `executeCustomScheduledTask(isOnTime)` - Always creates next period notes
 - `onWindowBecameVisible()` - Handles sleep/wake recovery
 - Device-specific scheduled times via `os.hostname()` stored in `deviceSettings`
 
@@ -293,21 +296,35 @@ scheduleDailyCheck()
   → Daily: tomorrow, Weekly/Monthly/etc: current period
 ```
 
-**Sleep Recovery (wake at 23:00, missed 22:30):**
+**Sleep Recovery (wake at 23:00, missed 22:30, not executed today):**
 ```
 visibilitychange event
   → onWindowBecameVisible()
-  → Check: currentTime > targetTime && not executed today
+  → Check: currentTime > targetTime && lastExecutionDate !== today
   → executeCustomScheduledTask(false)
-  → checkAndCreateNotes()
-  → All notes: current period
+  → checkAndCreateNextPeriodNotes({ scheduleName: 'scheduledTime' })
+  → Daily: tomorrow, others: current period
+  → Unpin old daily notes (if enabled)
 ```
 
-**Startup:**
+**Startup (before scheduled time, e.g., 15:00):**
 ```
 onLayoutReady()
+  → executeStartupLogic()
+  → currentTime < scheduledTime
   → checkAndCreateNotes({ scheduleName: 'startup' })
-  → All notes: current period
+  → All notes: current period (today)
+```
+
+**Startup (after scheduled time, e.g., 23:00):**
+```
+onLayoutReady()
+  → executeStartupLogic()
+  → currentTime > scheduledTime
+  → executeCustomScheduledTask()
+  → checkAndCreateNextPeriodNotes({ scheduleName: 'scheduledTime' })
+  → Daily: tomorrow, Weekly/Monthly/etc: current period
+  → Unpin old daily notes (if enabled)
 ```
 
 ### Device-Specific Settings
@@ -435,10 +452,11 @@ export interface CheckContext {
 **After:**
 ```typescript
 export interface CheckContext {
-  scheduleName?: 'scheduledTime' | 'lateExecution' | 'startup';
+  scheduleName?: 'scheduledTime' | 'startup';
 }
 ```
 - Code location: lines 12-14
+- Note: `lateExecution` context removed; all scheduled/late executions now use `scheduledTime`
 
 #### `src/__tests__/schedule.test.ts`
 
