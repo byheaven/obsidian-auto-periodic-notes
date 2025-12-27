@@ -18,6 +18,7 @@ export default class AutoPeriodicNotes extends Plugin {
   private scheduledTimeouts: Record<string, number | null> = {
     scheduledTime: null
   };
+  private lastVisibilityCheckTime: number = 0;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
@@ -323,6 +324,14 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private async onWindowBecameVisible(): Promise<void> {
+    // Debounce: skip if last check was within 5 seconds
+    const now = Date.now();
+    if (now - this.lastVisibilityCheckTime < 5000) {
+      debug('[Visibility] Skipping - debounce (last check was < 5s ago)');
+      return;
+    }
+    this.lastVisibilityCheckTime = now;
+
     // Only handle cases where advanced scheduling is enabled
     if (!this.settings.daily.enableAdvancedScheduling) {
       debug('[Visibility] Advanced scheduling not enabled, skipping');
@@ -335,25 +344,26 @@ export default class AutoPeriodicNotes extends Plugin {
       return;
     }
 
-    const now = new Date();
-    const todayString = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const currentDate = new Date();
+    const todayString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
     const [hours, minutes] = this.parseScheduledTime(scheduledTime);
 
     // Build today's target time
-    const todayTarget = new Date(now);
+    const todayTarget = new Date(currentDate);
     todayTarget.setHours(hours, minutes, 0, 0);
 
-    const currentTime = now.getTime();
+    const currentTime = currentDate.getTime();
     const targetTime = todayTarget.getTime();
 
-    debug(`[Visibility] Checking: now=${now.toISOString()}, target=${todayTarget.toISOString()}, lastExecution=${this.getLastExecutionDate()}`);
+    debug(`[Visibility] Checking: now=${currentDate.toISOString()}, target=${todayTarget.toISOString()}, lastExecution=${this.getLastExecutionDate()}`);
 
     if (currentTime < targetTime) {
       // Case 1: Current time is before the scheduled time
-      // Ensure timeout is correctly scheduled (reschedule to prevent being interrupted by sleep)
-      debug('[Visibility] Before scheduled time, ensuring timeout is set');
-      console.log(`[Auto Periodic Notes] Before scheduled time ${scheduledTime}, rescheduling...`);
+      // Run today's startup check and reschedule timer
+      debug('[Visibility] Before scheduled time, running startup check and rescheduling');
+      console.log(`[Auto Periodic Notes] Before scheduled time ${scheduledTime}, checking today's notes...`);
 
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
       this.scheduleDailyCheck();
     } else {
       // Case 2: Current time is after the scheduled time
