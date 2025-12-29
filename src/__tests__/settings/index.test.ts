@@ -1,7 +1,6 @@
 import { applyDefaultSettings, type ISettings } from '../../settings';
 
 describe('settings', () => {
-
   it('applies default settings with empty object', () => {
     const settings = {} as ISettings;
 
@@ -19,8 +18,8 @@ describe('settings', () => {
         available: true,
         enabled: true,
         closeExisting: true,
-        openAndPin: true
-      }
+        openAndPin: true,
+      },
     } as ISettings;
 
     const result = applyDefaultSettings(settings);
@@ -30,5 +29,4 @@ describe('settings', () => {
     expect(result.daily.closeExisting).toEqual(true);
     expect(result.daily.openAndPin).toEqual(true);
   });
-
 });

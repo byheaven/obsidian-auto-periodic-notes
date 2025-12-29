@@ -39,7 +39,7 @@ export async function processTemplaterInFile(
   if (force || !templater?.settings?.['trigger_on_file_creation']) {
     debug(`Processing Templater commands in file: ${file.path}`);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const previousActiveFile = app.workspace.getActiveFile();
       const wasAlreadyActive = previousActiveFile?.path === file.path;
@@ -50,11 +50,11 @@ export async function processTemplaterInFile(
         // Open in a new tab so we don't modify existing tabs
         tempLeaf = app.workspace.getLeaf('tab');
         await tempLeaf.openFile(file);
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
       await templater.templater.overwrite_active_file_commands();
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       if (tempLeaf && !wasAlreadyActive) {
         tempLeaf.detach();

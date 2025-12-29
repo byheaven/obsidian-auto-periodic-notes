@@ -6,7 +6,6 @@ import { DEFAULT_SETTINGS } from '../settings';
 import { ObsidianApp, ObsidianWorkspace } from '../types';
 
 describe('AutoPeriodicNotes', () => {
-
   let app: ObsidianApp;
   let workspace: ObsidianWorkspace;
   let manifest: PluginManifest;

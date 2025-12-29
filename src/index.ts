@@ -1,5 +1,9 @@
 import { Notice, Plugin, type PluginManifest } from 'obsidian';
-import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
+import {
+  ObsidianAppWithPlugins,
+  PERIODIC_NOTES_EVENT_SETTING_UPDATED,
+  PeriodicNotesPluginAdapter,
+} from 'obsidian-periodic-notes-provider';
 import { SETTINGS_UPDATED } from './events';
 import debug from './log';
 import NotesProvider from './notes/provider';
@@ -39,7 +43,9 @@ export default class AutoPeriodicNotes extends Plugin {
 
     // Watch for Periodic Notes settings changes
     const workspace: ObsidianWorkspace = this.app.workspace;
-    this.registerEvent(workspace.on(PERIODIC_NOTES_EVENT_SETTING_UPDATED, this.syncPeriodicNotesSettings.bind(this)));
+    this.registerEvent(
+      workspace.on(PERIODIC_NOTES_EVENT_SETTING_UPDATED, this.syncPeriodicNotesSettings.bind(this))
+    );
     this.syncPeriodicNotesSettings();
 
     // Add the settings tab

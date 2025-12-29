@@ -1,14 +1,9 @@
-export type IPeriodicity =
-  | 'daily'
-  | 'weekly'
-  | 'monthly'
-  | 'quarterly'
-  | 'yearly';
+export type IPeriodicity = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 
 export interface IPeriodicitySettings {
   available: boolean;
   enabled: boolean;
-  closeExisting: boolean,
+  closeExisting: boolean;
   openAndPin: boolean;
 }
 
@@ -36,7 +31,7 @@ export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze(
 export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   alwaysOpen: false,
   processTemplater: false,
-  daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false, },
+  daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
   quarterly: { ...DEFAULT_PERIODICITY_SETTINGS },
@@ -44,9 +39,5 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
 });
 
 export function applyDefaultSettings(savedSettings: ISettings): ISettings {
-  return Object.assign(
-    {},
-    DEFAULT_SETTINGS,
-    savedSettings
-  );
+  return Object.assign({}, DEFAULT_SETTINGS, savedSettings);
 }
