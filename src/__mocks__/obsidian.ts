@@ -59,7 +59,7 @@ export class Setting {
   }
 
   addToggle(cb: (toggle: ToggleComponent) => any) {
-    cb(new ToggleComponent);
+    cb(new ToggleComponent());
     return this;
   }
 }

@@ -4,7 +4,6 @@ import { DEFAULT_SETTINGS } from '../../settings';
 import AutoPeriodicNotesSettingsTab from '../../settings/tab';
 
 describe('settings tab', () => {
-
   let app: App;
   let plugin: AutoTasks;
   let containerEl: HTMLElement;
@@ -113,5 +112,4 @@ describe('settings tab', () => {
     expect(setNameSpy).toHaveBeenCalledWith('Open and pin new yearly notes');
     expect(setNameSpy).toHaveBeenCalledWith('Close older yearly notes');
   });
-
 });
