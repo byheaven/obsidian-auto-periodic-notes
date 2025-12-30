@@ -6,6 +6,7 @@ import type { ISettings } from '../../settings';
 jest.mock('obsidian');
 jest.mock('obsidian-periodic-notes-provider');
 jest.mock('obsidian-daily-notes-interface', () => ({
+  // Daily
   getAllDailyNotes: jest.fn().mockReturnValue({}),
   getDailyNote: jest.fn().mockReturnValue(null),
   createDailyNote: jest.fn().mockImplementation(() => {
@@ -23,6 +24,78 @@ jest.mock('obsidian-daily-notes-interface', () => ({
     template: '',
   }),
   DEFAULT_DAILY_NOTE_FORMAT: 'YYYY-MM-DD',
+  // Weekly
+  getAllWeeklyNotes: jest.fn().mockReturnValue({}),
+  getWeeklyNote: jest.fn().mockReturnValue(null),
+  createWeeklyNote: jest.fn().mockImplementation(() => {
+    const mockFile = {
+      path: 'weekly-note.md',
+      name: 'weekly-note.md',
+      basename: 'weekly-note',
+      extension: 'md',
+    } as TFile;
+    return Promise.resolve(mockFile);
+  }),
+  getWeeklyNoteSettings: jest.fn().mockReturnValue({
+    folder: 'weekly',
+    format: 'gggg-[W]ww',
+    template: '',
+  }),
+  DEFAULT_WEEKLY_NOTE_FORMAT: 'gggg-[W]ww',
+  // Monthly
+  getAllMonthlyNotes: jest.fn().mockReturnValue({}),
+  getMonthlyNote: jest.fn().mockReturnValue(null),
+  createMonthlyNote: jest.fn().mockImplementation(() => {
+    const mockFile = {
+      path: 'monthly-note.md',
+      name: 'monthly-note.md',
+      basename: 'monthly-note',
+      extension: 'md',
+    } as TFile;
+    return Promise.resolve(mockFile);
+  }),
+  getMonthlyNoteSettings: jest.fn().mockReturnValue({
+    folder: 'monthly',
+    format: 'YYYY-MM',
+    template: '',
+  }),
+  DEFAULT_MONTHLY_NOTE_FORMAT: 'YYYY-MM',
+  // Quarterly
+  getAllQuarterlyNotes: jest.fn().mockReturnValue({}),
+  getQuarterlyNote: jest.fn().mockReturnValue(null),
+  createQuarterlyNote: jest.fn().mockImplementation(() => {
+    const mockFile = {
+      path: 'quarterly-note.md',
+      name: 'quarterly-note.md',
+      basename: 'quarterly-note',
+      extension: 'md',
+    } as TFile;
+    return Promise.resolve(mockFile);
+  }),
+  getQuarterlyNoteSettings: jest.fn().mockReturnValue({
+    folder: 'quarterly',
+    format: 'YYYY-[Q]Q',
+    template: '',
+  }),
+  DEFAULT_QUARTERLY_NOTE_FORMAT: 'YYYY-[Q]Q',
+  // Yearly
+  getAllYearlyNotes: jest.fn().mockReturnValue({}),
+  getYearlyNote: jest.fn().mockReturnValue(null),
+  createYearlyNote: jest.fn().mockImplementation(() => {
+    const mockFile = {
+      path: 'yearly-note.md',
+      name: 'yearly-note.md',
+      basename: 'yearly-note',
+      extension: 'md',
+    } as TFile;
+    return Promise.resolve(mockFile);
+  }),
+  getYearlyNoteSettings: jest.fn().mockReturnValue({
+    folder: 'yearly',
+    format: 'YYYY',
+    template: '',
+  }),
+  DEFAULT_YEARLY_NOTE_FORMAT: 'YYYY',
 }));
 
 const TEST_WAIT_TIMEOUT: number = 10;
@@ -77,13 +150,18 @@ describe('Notes Provider', () => {
       deviceSettings: {},
     };
 
-    const mockApp = { workspace: new Workspace() } as any;
+    const mockApp = {
+      workspace: new Workspace(),
+      vault: {
+        getAbstractFileByPath: jest.fn().mockReturnValue(null),
+      },
+    } as any;
     mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
     sut = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
   it('does not create notes when nothing is available', async () => {
@@ -625,6 +703,163 @@ describe('Notes Provider', () => {
     // Should open the synced file
     expect(mockOpenFile).toHaveBeenCalledWith(syncedFile);
     expect(mockSetPinned).toHaveBeenCalled();
+  });
+
+  describe('Next Period Note Creation', () => {
+    it('creates next week note when nextPeriod is true', async () => {
+      settings.weekly.available = true;
+      settings.weekly.enabled = true;
+      settings.weekly.openAndPin = true;
+
+      const { createWeeklyNote, getAllWeeklyNotes, getWeeklyNote, getWeeklyNoteSettings } = require('obsidian-daily-notes-interface');
+      getAllWeeklyNotes.mockReturnValue({});
+      getWeeklyNote.mockReturnValue(null);
+      getWeeklyNoteSettings.mockReturnValue({ folder: 'weekly', format: 'gggg-[W]ww', template: '' });
+
+      const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+      mockOpenFile.mockImplementation(() => Promise.resolve());
+      const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+      mockSetPinned.mockImplementation(() => {});
+      const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+      mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+      await sut.checkAndCreateNextPeriodNotes(settings);
+
+      expect(createWeeklyNote).toHaveBeenCalled();
+    });
+
+    it('creates next month note when nextPeriod is true', async () => {
+      settings.monthly.available = true;
+      settings.monthly.enabled = true;
+      settings.monthly.openAndPin = true;
+
+      const { createMonthlyNote, getAllMonthlyNotes, getMonthlyNote, getMonthlyNoteSettings } = require('obsidian-daily-notes-interface');
+      getAllMonthlyNotes.mockReturnValue({});
+      getMonthlyNote.mockReturnValue(null);
+      getMonthlyNoteSettings.mockReturnValue({ folder: 'monthly', format: 'YYYY-MM', template: '' });
+
+      const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+      mockOpenFile.mockImplementation(() => Promise.resolve());
+      const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+      mockSetPinned.mockImplementation(() => {});
+      const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+      mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+      await sut.checkAndCreateNextPeriodNotes(settings);
+
+      expect(createMonthlyNote).toHaveBeenCalled();
+    });
+
+    it('creates next quarter note when nextPeriod is true', async () => {
+      settings.quarterly.available = true;
+      settings.quarterly.enabled = true;
+      settings.quarterly.openAndPin = true;
+
+      const { createQuarterlyNote, getAllQuarterlyNotes, getQuarterlyNote, getQuarterlyNoteSettings } = require('obsidian-daily-notes-interface');
+      getAllQuarterlyNotes.mockReturnValue({});
+      getQuarterlyNote.mockReturnValue(null);
+      getQuarterlyNoteSettings.mockReturnValue({ folder: 'quarterly', format: 'YYYY-[Q]Q', template: '' });
+
+      const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+      mockOpenFile.mockImplementation(() => Promise.resolve());
+      const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+      mockSetPinned.mockImplementation(() => {});
+      const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+      mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+      await sut.checkAndCreateNextPeriodNotes(settings);
+
+      expect(createQuarterlyNote).toHaveBeenCalled();
+    });
+
+    it('creates next year note when nextPeriod is true', async () => {
+      settings.yearly.available = true;
+      settings.yearly.enabled = true;
+      settings.yearly.openAndPin = true;
+
+      const { createYearlyNote, getAllYearlyNotes, getYearlyNote, getYearlyNoteSettings } = require('obsidian-daily-notes-interface');
+      getAllYearlyNotes.mockReturnValue({});
+      getYearlyNote.mockReturnValue(null);
+      getYearlyNoteSettings.mockReturnValue({ folder: 'yearly', format: 'YYYY', template: '' });
+
+      const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+      mockOpenFile.mockImplementation(() => Promise.resolve());
+      const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+      mockSetPinned.mockImplementation(() => {});
+      const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+      mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+      await sut.checkAndCreateNextPeriodNotes(settings);
+
+      expect(createYearlyNote).toHaveBeenCalled();
+    });
+
+    it('does not create weekly note if it already exists', async () => {
+      settings.weekly.available = true;
+      settings.weekly.enabled = true;
+
+      const existingNote = { path: 'weekly/2025-W05.md' } as TFile;
+      const { createWeeklyNote, getAllWeeklyNotes, getWeeklyNote, getWeeklyNoteSettings } = require('obsidian-daily-notes-interface');
+      getAllWeeklyNotes.mockReturnValue({ 'week-key': existingNote });
+      getWeeklyNote.mockReturnValue(existingNote);
+      getWeeklyNoteSettings.mockReturnValue({ folder: 'weekly', format: 'gggg-[W]ww', template: '' });
+
+      await sut.checkAndCreateNextPeriodNotes(settings);
+
+      expect(createWeeklyNote).not.toHaveBeenCalled();
+    });
+
+    it('finds synced weekly note via filesystem fallback when not in cache', async () => {
+      settings.weekly.available = true;
+      settings.weekly.enabled = true;
+      settings.weekly.openAndPin = true;
+
+      const syncedFile = {
+        path: 'weekly/2025-W02.md',
+        name: '2025-W02.md',
+        basename: '2025-W02',
+        extension: 'md',
+      } as TFile;
+
+      const { getWeeklyNote, createWeeklyNote, getWeeklyNoteSettings, getAllWeeklyNotes } = require('obsidian-daily-notes-interface');
+      getAllWeeklyNotes.mockReturnValue({});
+      getWeeklyNote.mockReturnValue(null);
+      getWeeklyNoteSettings.mockReturnValue({
+        folder: 'weekly',
+        format: 'gggg-[W]ww',
+        template: '',
+      });
+
+      const mockVaultGetAbstractFileByPath = jest.fn().mockImplementation((path: string) => {
+        if (path.startsWith('weekly/')) {
+          return syncedFile;
+        }
+        return null;
+      });
+      const mockApp = {
+        workspace: new Workspace(),
+        vault: {
+          getAbstractFileByPath: mockVaultGetAbstractFileByPath,
+        },
+      } as any;
+
+      const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<typeof WorkspaceLeaf.prototype.openFile>;
+      mockOpenFile.mockImplementation(() => Promise.resolve());
+      const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<typeof WorkspaceLeaf.prototype.setPinned>;
+      mockSetPinned.mockImplementation(() => {});
+      const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
+      mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+      const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+      const sutWithVault = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
+
+      await sutWithVault.checkAndCreateNextPeriodNotes(settings, { scheduleName: 'scheduledTime' });
+
+      // Should NOT create a new file since it exists on filesystem
+      expect(createWeeklyNote).not.toHaveBeenCalled();
+      // Should open the synced file
+      expect(mockOpenFile).toHaveBeenCalledWith(syncedFile);
+    });
   });
 
 });

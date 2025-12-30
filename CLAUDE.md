@@ -206,6 +206,39 @@ if (processTemplater) {
 
 The plugin now uses a **single user-configurable scheduled time** instead of multiple fixed schedules. This simplification was implemented in December 2025 to improve reliability and user control.
 
+### Trigger Logic Summary
+
+#### Trigger Scenarios and Behavior
+
+| Trigger | Condition | Method Called | Period Created | Context |
+|---------|-----------|---------------|----------------|---------|
+| **Startup** | Advanced scheduling disabled | `checkAndCreateNotes()` | Current | `startup` |
+| **Startup** | Current time < scheduled time | `checkAndCreateNotes()` | Current | `startup` |
+| **Startup** | Current time > scheduled time | `checkAndCreateNextPeriodNotes()` | Next | `scheduledTime` |
+| **Scheduled Timer** | On-time (±5min tolerance) | `checkAndCreateNextPeriodNotes()` | Next | `scheduledTime` |
+| **Sleep/Wake** | Current time < scheduled time | `checkAndCreateNotes()` | Current | `startup` |
+| **Sleep/Wake** | Current time > scheduled time, not executed today | `checkAndCreateNextPeriodNotes()` | Next | `scheduledTime` |
+| **Sleep/Wake** | Current time > scheduled time, already executed | - | Skip | - |
+
+#### Period Calculation by Note Type
+
+| Note Type | Current Period | Next Period |
+|-----------|---------------|-------------|
+| Daily | Today | Tomorrow (skip weekends if enabled) |
+| Weekly | This week | Next week start (startOf week) |
+| Monthly | This month | Next month 1st (startOf month) |
+| Quarterly | This quarter | Next quarter start (startOf quarter) |
+| Yearly | This year | Next year Jan 1 (startOf year) |
+
+#### Special Handling
+
+| Feature | Description |
+|---------|-------------|
+| **5-min Tolerance** | Timer checks if within ±5min of target; reschedules if exceeded |
+| **Debounce** | Sleep/wake checks skip if last check was < 5 seconds ago |
+| **Execution Record** | `lastExecutionDate` prevents duplicate daily execution |
+| **Device Independence** | Each device has separate scheduled time and execution record |
+
 **Scheduling Triggers:**
 
 1. **Startup Check** - On plugin load (after layout ready)
@@ -217,7 +250,7 @@ The plugin now uses a **single user-configurable scheduled time** instead of mul
 2. **User-Configured Daily Check** - At user's specified time (e.g., 22:30)
    - Creates **next period** notes for all enabled types
    - Daily: Tomorrow's note (or next weekday if excludeWeekends enabled)
-   - Weekly/Monthly/Quarterly/Yearly: Current period (library limitation*)
+   - Weekly/Monthly/Quarterly/Yearly: Next period notes
    - Uses `checkAndCreateNextPeriodNotes(context: { scheduleName: 'scheduledTime' })`
 
 3. **Sleep/Wake Recovery** - After missed scheduled time (via Visibility API)
@@ -274,16 +307,18 @@ The plugin now uses a **single user-configurable scheduled time** instead of mul
 
 ### Next Period Note Creation
 
-**Daily Notes:**
+**All Note Types (Daily/Weekly/Monthly/Quarterly/Yearly):**
 - Fully implemented using `obsidian-daily-notes-interface`
-- When `nextPeriod=true`: Creates tomorrow's note (skips weekends if enabled)
-- Uses `createDailyNote(targetDate)` with calculated future date
+- When `nextPeriod=true`: Creates next period note with appropriate date calculation
+- Uses `createXXXNote(targetDate)` with calculated future date
+- Helper functions: `getPeriodicNoteHelpers()`, `calculateNextPeriodDate()`, `getPeriodLabel()`
 
-**Other Note Types (Weekly/Monthly/Quarterly/Yearly):**
-- **Current Limitation:** `obsidian-periodic-notes-provider` library does not support creating notes for future periods
-- **Current Behavior:** Creates current period note when `nextPeriod=true`
-- **TODO:** Implement manual file creation using Periodic Notes settings (see `src/notes/provider.ts:200-203`)
-- Note class constructors don't accept date parameters: `new WeeklyNote()`, `new MonthlyNote()`, etc.
+**Date Calculation:**
+- Daily: `+1 day` (skip weekends if enabled)
+- Weekly: `+1 week, startOf('week')`
+- Monthly: `+1 month, startOf('month')`
+- Quarterly: `+1 quarter, startOf('quarter')`
+- Yearly: `+1 year, startOf('year')`
 
 ### Execution Flow Diagrams
 
@@ -293,7 +328,7 @@ scheduleDailyCheck()
   → setTimeout(22:30)
   → executeCustomScheduledTask(true)
   → checkAndCreateNextPeriodNotes()
-  → Daily: tomorrow, Weekly/Monthly/etc: current period
+  → All notes: next period
 ```
 
 **Sleep Recovery (wake at 23:00, missed 22:30, not executed today):**
@@ -303,7 +338,7 @@ visibilitychange event
   → Check: currentTime > targetTime && lastExecutionDate !== today
   → executeCustomScheduledTask(false)
   → checkAndCreateNextPeriodNotes({ scheduleName: 'scheduledTime' })
-  → Daily: tomorrow, others: current period
+  → All notes: next period
   → Unpin old daily notes (if enabled)
 ```
 
@@ -313,7 +348,7 @@ onLayoutReady()
   → executeStartupLogic()
   → currentTime < scheduledTime
   → checkAndCreateNotes({ scheduleName: 'startup' })
-  → All notes: current period (today)
+  → All notes: current period
 ```
 
 **Startup (after scheduled time, e.g., 23:00):**
@@ -323,7 +358,7 @@ onLayoutReady()
   → currentTime > scheduledTime
   → executeCustomScheduledTask()
   → checkAndCreateNextPeriodNotes({ scheduleName: 'scheduledTime' })
-  → Daily: tomorrow, Weekly/Monthly/etc: current period
+  → All notes: next period
   → Unpin old daily notes (if enabled)
 ```
 

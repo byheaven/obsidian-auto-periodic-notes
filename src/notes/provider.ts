@@ -3,7 +3,18 @@ import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
 import { DailyNote, MonthlyNote, Note, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
-import { createDailyNote, getDailyNote, getAllDailyNotes, getDailyNoteSettings, DEFAULT_DAILY_NOTE_FORMAT } from 'obsidian-daily-notes-interface';
+import {
+  // Daily
+  createDailyNote, getDailyNote, getAllDailyNotes, getDailyNoteSettings, DEFAULT_DAILY_NOTE_FORMAT,
+  // Weekly
+  createWeeklyNote, getWeeklyNote, getAllWeeklyNotes, getWeeklyNoteSettings, DEFAULT_WEEKLY_NOTE_FORMAT,
+  // Monthly
+  createMonthlyNote, getMonthlyNote, getAllMonthlyNotes, getMonthlyNoteSettings, DEFAULT_MONTHLY_NOTE_FORMAT,
+  // Quarterly
+  createQuarterlyNote, getQuarterlyNote, getAllQuarterlyNotes, getQuarterlyNoteSettings, DEFAULT_QUARTERLY_NOTE_FORMAT,
+  // Yearly
+  createYearlyNote, getYearlyNote, getAllYearlyNotes, getYearlyNoteSettings, DEFAULT_YEARLY_NOTE_FORMAT,
+} from 'obsidian-daily-notes-interface';
 import { processTemplaterInFile } from '../templater';
 import type AutoPeriodicNotes from '../index';
 
@@ -201,28 +212,96 @@ export default class NotesProvider {
           }
         }
       } else {
-        // Non-daily notes
-        // Note: The obsidian-periodic-notes-provider library doesn't support creating
-        // notes for future periods (next week, next month, etc.) directly.
-        // For now, we create the current period note if it doesn't exist.
-        // TODO: Implement manual file creation for future period notes
-        if (!cls.isPresent()) {
-          const periodLabel = nextPeriod ? `Current ${term}` : `Today's ${term}`;
-          debug(`Creating new ${term} note`);
-          const newNote: TFile = await cls.create();
-          new Notice(`${periodLabel} note has been created.`, 5000);
+        // Non-daily notes: weekly, monthly, quarterly, yearly
+        const helpers = this.getPeriodicNoteHelpers(term);
+        if (!helpers) {
+          debug(`Unknown term: ${term}`);
+          return;
+        }
 
-          await this.handleClose(setting, cls, newNote);
-          await this.handleOpen(setting, newNote, term);
+        // Determine which behavior to use based on context
+        const isScheduledTime = context?.scheduleName === 'scheduledTime';
+        const useAdvancedPath = isScheduledTime || nextPeriod;
 
-          if (processTemplater) {
-            await processTemplaterInFile(this.app, newNote, true);
+        if (useAdvancedPath) {
+          // Use obsidian-daily-notes-interface for date-specific operations
+          let targetDate = moment();
+
+          // Apply next period offset if requested
+          if (nextPeriod) {
+            targetDate = this.calculateNextPeriodDate(term, targetDate);
+            debug(`Target date for next period ${term}: ${targetDate.format('YYYY-MM-DD')}`);
           }
-        } else if (alwaysOpen) {
-          debug(`Set to always open notes, getting current ${term} note`);
-          const existingNote: TFile = cls.getCurrent();
-          await this.handleClose(setting, cls, existingNote);
-          await this.handleOpen(setting, existingNote, term);
+
+          // Check if note exists for target date using library functions
+          const allNotes = helpers.getAll();
+          let existingNote = helpers.get(targetDate, allNotes);
+
+          // Fallback: if cache doesn't have the note, check filesystem directly
+          // This handles synced files that haven't been indexed yet
+          if (!existingNote) {
+            const noteSettings = helpers.getSettings();
+            const format = noteSettings.format || helpers.defaultFormat;
+            const folder = noteSettings.folder?.trim() || '';
+            const filename = targetDate.format(format);
+            const filepath = folder ? `${folder}/${filename}.md` : `${filename}.md`;
+
+            const file = this.app.vault.getAbstractFileByPath(filepath);
+            if (file && 'path' in file && (file as TFile).path?.endsWith('.md')) {
+              debug(`${term} note not in cache but exists in filesystem: ${filepath}`);
+              existingNote = file as TFile;
+            }
+          }
+
+          if (!existingNote) {
+            // Create the note for target date
+            debug(`Creating ${term} note for ${targetDate.format('YYYY-MM-DD')}`);
+            const newNote = await helpers.create(targetDate);
+
+            const periodLabel = this.getPeriodLabel(term, nextPeriod);
+            new Notice(`${periodLabel} note has been created.`, 5000);
+
+            await this.handleClose(setting, cls, newNote);
+            await this.handleOpen(setting, newNote, term);
+
+            if (processTemplater) {
+              await processTemplaterInFile(this.app, newNote, true);
+            }
+          } else {
+            // Note already exists - check if we need to handle existing tabs
+            const isStartup = context?.scheduleName === 'startup';
+            const shouldCloseOldNotes = isStartup && setting.closeExisting;
+            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || isScheduledTime;
+
+            if (shouldHandleTabs) {
+              debug(`${term} note exists for ${targetDate.format('YYYY-MM-DD')}, handling existing tabs`);
+
+              if (shouldCloseOldNotes) {
+                await this.handleClose(setting, cls, existingNote);
+              }
+
+              await this.handleOpen(setting, existingNote, term);
+            }
+          }
+        } else {
+          // Use original path for backward compatibility (no advanced scheduling)
+          if (!cls.isPresent()) {
+            debug(`Creating new ${term} note`);
+            const newNote: TFile = await cls.create();
+            new Notice(`${this.getPeriodLabel(term, false)} note has been created.`, 5000);
+
+            await this.handleClose(setting, cls, newNote);
+            await this.handleOpen(setting, newNote, term);
+
+            if (processTemplater) {
+              await processTemplaterInFile(this.app, newNote, true);
+            }
+          } else if (alwaysOpen) {
+            debug(`Set to always open notes, getting current ${term} note`);
+            const existingNote: TFile = cls.getCurrent();
+            await this.handleClose(setting, cls, existingNote);
+            await this.handleOpen(setting, existingNote, term);
+          }
         }
       }
 
@@ -359,5 +438,77 @@ export default class NotesProvider {
   private isEmptyLeaf(leaf: WorkspaceLeaf): boolean {
     const viewType = leaf.view.getViewType();
     return ["empty", "home-tab-view"].includes(viewType);
+  }
+
+  // Calculate next period date based on term
+  private calculateNextPeriodDate(term: string, date: moment.Moment): moment.Moment {
+    switch (term) {
+      case 'daily':
+        return date.clone().add(1, 'day');
+      case 'weekly':
+        return date.clone().add(1, 'week').startOf('week');
+      case 'monthly':
+        return date.clone().add(1, 'month').startOf('month');
+      case 'quarterly':
+        return date.clone().add(1, 'quarter').startOf('quarter');
+      case 'yearly':
+        return date.clone().add(1, 'year').startOf('year');
+      default:
+        return date;
+    }
+  }
+
+  // Get user-friendly period label
+  private getPeriodLabel(term: string, isFuture: boolean): string {
+    const labels: Record<string, [string, string]> = {
+      daily: ["Today's daily", "Tomorrow's daily"],
+      weekly: ["This week's weekly", "Next week's weekly"],
+      monthly: ["This month's monthly", "Next month's monthly"],
+      quarterly: ["This quarter's quarterly", "Next quarter's quarterly"],
+      yearly: ["This year's yearly", "Next year's yearly"],
+    };
+    return labels[term]?.[isFuture ? 1 : 0] || `${isFuture ? 'Next' : 'This'} ${term}`;
+  }
+
+  // Get helper functions for each note type
+  private getPeriodicNoteHelpers(term: string) {
+    const helpers = {
+      daily: {
+        create: createDailyNote,
+        get: getDailyNote,
+        getAll: getAllDailyNotes,
+        getSettings: getDailyNoteSettings,
+        defaultFormat: DEFAULT_DAILY_NOTE_FORMAT,
+      },
+      weekly: {
+        create: createWeeklyNote,
+        get: getWeeklyNote,
+        getAll: getAllWeeklyNotes,
+        getSettings: getWeeklyNoteSettings,
+        defaultFormat: DEFAULT_WEEKLY_NOTE_FORMAT,
+      },
+      monthly: {
+        create: createMonthlyNote,
+        get: getMonthlyNote,
+        getAll: getAllMonthlyNotes,
+        getSettings: getMonthlyNoteSettings,
+        defaultFormat: DEFAULT_MONTHLY_NOTE_FORMAT,
+      },
+      quarterly: {
+        create: createQuarterlyNote,
+        get: getQuarterlyNote,
+        getAll: getAllQuarterlyNotes,
+        getSettings: getQuarterlyNoteSettings,
+        defaultFormat: DEFAULT_QUARTERLY_NOTE_FORMAT,
+      },
+      yearly: {
+        create: createYearlyNote,
+        get: getYearlyNote,
+        getAll: getAllYearlyNotes,
+        getSettings: getYearlyNoteSettings,
+        defaultFormat: DEFAULT_YEARLY_NOTE_FORMAT,
+      },
+    };
+    return helpers[term as keyof typeof helpers];
   }
 }
