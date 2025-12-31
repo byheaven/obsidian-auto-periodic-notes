@@ -41,6 +41,16 @@ export async function processTemplaterInFile(
     try {
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // Try silent processing first (no need to open file in a tab)
+      if (typeof templater.templater.overwrite_file_commands === 'function') {
+        debug('Using silent Templater processing (overwrite_file_commands)');
+        await templater.templater.overwrite_file_commands(file);
+        debug('Templater processing completed successfully (silent)');
+        return;
+      }
+
+      // Fallback: use the old method that requires opening the file
+      debug('Falling back to active file Templater processing');
       const previousActiveFile = app.workspace.getActiveFile();
       const wasAlreadyActive = previousActiveFile?.path === file.path;
       let tempLeaf = null;
