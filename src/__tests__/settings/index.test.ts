@@ -15,6 +15,7 @@ describe('settings', () => {
 
   it('applies default settings but overrides with saved settings correctly', () => {
     const settings = {
+      gitCommit: true,
       daily: {
         available: true,
         enabled: true,
@@ -31,6 +32,7 @@ describe('settings', () => {
     expect(result.daily.closeExisting).toEqual(true);
     expect(result.daily.open).toEqual(true);
     expect(result.daily.pin).toEqual(true);
+    expect(result.gitCommit).toEqual(true);
   });
 
   it('migrates "openAndPin" setting into new format', () => {

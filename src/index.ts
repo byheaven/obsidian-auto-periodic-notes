@@ -10,11 +10,13 @@ import NotesProvider from './notes/provider';
 import { applyDefaultSettings, type ISettings } from './settings';
 import AutoPeriodicNotesSettingsTab from './settings/tab';
 import type { ObsidianApp, ObsidianWorkspace } from './types';
+import { Git } from './git';
 
 export default class AutoPeriodicNotes extends Plugin {
   public settings: ISettings;
   private periodicNotesPlugin: PeriodicNotesPluginAdapter;
   private notes: NotesProvider;
+  private git: Git;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
@@ -22,6 +24,7 @@ export default class AutoPeriodicNotes extends Plugin {
     this.settings = {} as ISettings;
     this.periodicNotesPlugin = new PeriodicNotesPluginAdapter(app as ObsidianAppWithPlugins);
     this.notes = new NotesProvider(app.workspace, app);
+    this.git = new Git(app.vault);
   }
 
   async onload(): Promise<void> {
@@ -49,7 +52,22 @@ export default class AutoPeriodicNotes extends Plugin {
     this.syncPeriodicNotesSettings();
 
     // Add the settings tab
-    this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this));
+    this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this, this.git));
+
+    // Register the commit check to run each five minutes
+    this.registerInterval(
+      window.setInterval(() => {
+        this.git.commitChanges(this.settings);
+      }, 300000)
+    );
+
+    // Register the git folder check every five minutes
+    this.registerInterval(
+      window.setInterval(() => {
+        this.git.checkForGitRepo();
+      }, 300000)
+    );
+    this.git.checkForGitRepo();
 
     // Register the standard check for new notes and run immediately
     this.registerInterval(

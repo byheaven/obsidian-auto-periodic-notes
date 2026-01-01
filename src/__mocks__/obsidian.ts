@@ -39,6 +39,7 @@ class BaseComponent {
     return this;
   }
 }
+export class TextAreaComponent extends BaseComponent {}
 export class ToggleComponent extends BaseComponent {}
 
 export class Setting {
@@ -61,5 +62,20 @@ export class Setting {
   addToggle(cb: (toggle: ToggleComponent) => any) {
     cb(new ToggleComponent());
     return this;
+  }
+
+  addTextArea(cb: (text: TextAreaComponent) => any) {
+    cb(new TextAreaComponent());
+    return this;
+  }
+}
+
+export class FileSystemAdapter {
+  async exists(normalizedPath: string, sensitive?: boolean): Promise<boolean> {
+    return true;
+  }
+
+  getBasePath(): string {
+    return '';
   }
 }

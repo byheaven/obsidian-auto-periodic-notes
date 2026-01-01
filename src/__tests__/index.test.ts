@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import { PluginManifest } from 'obsidian';
+import { PluginManifest, Vault } from 'obsidian';
 import AutoPeriodicNotes from '../';
 import { SETTINGS_UPDATED } from '../events';
 import { DEFAULT_SETTINGS } from '../settings';
@@ -16,6 +16,7 @@ describe('AutoPeriodicNotes', () => {
     workspace = jest.fn() as unknown as ObsidianWorkspace;
     workspace.onLayoutReady = jest.fn();
     workspace.trigger = jest.fn();
+    app.vault = jest.fn() as unknown as Vault;
     app.workspace = workspace;
     manifest = JSON.parse(readFileSync(__dirname + '/../../manifest.json', 'utf-8'));
     sut = new AutoPeriodicNotesTestable(app, manifest);

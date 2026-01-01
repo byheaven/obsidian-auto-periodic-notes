@@ -2,10 +2,12 @@ import { App, Setting } from 'obsidian';
 import AutoTasks from '../..';
 import { DEFAULT_SETTINGS } from '../../settings';
 import AutoPeriodicNotesSettingsTab from '../../settings/tab';
+import { Git } from '../../git';
 
 describe('settings tab', () => {
   let app: App;
   let plugin: AutoTasks;
+  let git: Git;
   let containerEl: HTMLElement;
 
   let sut: AutoPeriodicNotesSettingsTab;
@@ -19,6 +21,9 @@ describe('settings tab', () => {
     } as unknown as App;
     plugin = jest.fn() as unknown as AutoTasks;
     plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
+    git = jest.fn() as unknown as Git;
+    git.isGitRepo = jest.fn();
+    jest.spyOn(git, 'isGitRepo').mockReturnValue(false);
     containerEl = jest.fn() as unknown as HTMLElement;
     containerEl.createDiv = jest.fn();
     containerEl.createEl = jest.fn();
@@ -31,7 +36,7 @@ describe('settings tab', () => {
     jest.spyOn(containerEl, 'createDiv').mockReturnValue(divEl);
     jest.spyOn(containerEl, 'createEl').mockReturnValue(jest.fn() as unknown as HTMLElement);
 
-    sut = new AutoPeriodicNotesSettingsTab(app, plugin);
+    sut = new AutoPeriodicNotesSettingsTab(app, plugin, git);
     sut.containerEl = containerEl;
     // Manually set app since the mock PluginSettingTab doesn't do it
     (sut as any).app = app;
@@ -114,5 +119,18 @@ describe('settings tab', () => {
     expect(setNameSpy).toHaveBeenCalledWith('Open new yearly notes');
     expect(setNameSpy).toHaveBeenCalledWith('Pin new yearly notes');
     expect(setNameSpy).toHaveBeenCalledWith('Close older yearly notes');
+  });
+
+  it('displays git settings when repo is detected', () => {
+    jest.spyOn(git, 'isGitRepo').mockReturnValue(true);
+
+    const setNameSpy = jest.spyOn(Setting.prototype, 'setName');
+
+    sut.display();
+
+    expect(setNameSpy).toHaveBeenCalledWith(
+      'Enable automatic git commit at the end of each day (18:00/6pm)'
+    );
+    expect(setNameSpy).toHaveBeenCalledWith('Git commit message format');
   });
 });
