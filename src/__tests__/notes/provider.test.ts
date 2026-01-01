@@ -26,32 +26,37 @@ describe('Notes Provider', () => {
         available: false,
         enabled: false,
         closeExisting: false,
-        openAndPin: false,
+        open: false,
+        pin: false,
         excludeWeekends: false,
       },
       weekly: {
         available: false,
         enabled: false,
         closeExisting: false,
-        openAndPin: false,
+        open: false,
+        pin: false,
       },
       monthly: {
         available: false,
         enabled: false,
         closeExisting: false,
-        openAndPin: false,
+        open: false,
+        pin: false,
       },
       quarterly: {
         available: false,
         enabled: false,
         closeExisting: false,
-        openAndPin: false,
+        open: false,
+        pin: false,
       },
       yearly: {
         available: false,
         enabled: false,
         closeExisting: false,
-        openAndPin: false,
+        open: false,
+        pin: false,
       },
     };
 
@@ -362,11 +367,12 @@ describe('Notes Provider', () => {
       .mockReturnValueOnce({})
       .mockReturnValueOnce({ file: 'daily/2025-01-01.md' })
       .mockReturnValueOnce({ file: newFile.path });
-    const leaves: WorkspaceLeaf[] = [];
-    leaves.push(new WorkspaceLeaf());
-    leaves.push(new WorkspaceLeaf());
-    leaves.push(new WorkspaceLeaf());
-    leaves.push(new WorkspaceLeaf());
+    const leaves: WorkspaceLeaf[] = [
+      new WorkspaceLeaf(),
+      new WorkspaceLeaf(),
+      new WorkspaceLeaf(),
+      new WorkspaceLeaf(),
+    ];
     leaves[0].view = new MarkdownView(leaves[0]);
     leaves[1].view = new MarkdownView(leaves[1]);
     leaves[2].view = new MarkdownView(leaves[2]);
@@ -495,10 +501,47 @@ describe('Notes Provider', () => {
     expect(mockSetPinned).not.toHaveBeenCalled();
   });
 
-  it('pins new notes when enabled', async () => {
+  it('opens new notes when enabled', async () => {
     settings.daily.available = true;
     settings.daily.enabled = true;
-    settings.daily.openAndPin = true;
+    settings.daily.open = true;
+
+    const expectedFile = new TFile();
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<
+      typeof DailyNote.prototype.isPresent
+    >;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const mockDailyCreate = DailyNote.prototype.create as jest.MockedFunction<
+      typeof DailyNote.prototype.create
+    >;
+    mockDailyCreate.mockImplementation(() => Promise.resolve(expectedFile));
+    const mockOpenFile = WorkspaceLeaf.prototype.openFile as jest.MockedFunction<
+      typeof WorkspaceLeaf.prototype.openFile
+    >;
+    mockOpenFile.mockImplementation(() => Promise.resolve());
+    const mockSetPinned = WorkspaceLeaf.prototype.setPinned as jest.MockedFunction<
+      typeof WorkspaceLeaf.prototype.setPinned
+    >;
+    mockSetPinned.mockImplementation(() => {});
+    const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<
+      typeof Workspace.prototype.getLeaf
+    >;
+    mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
+
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyIsPresent).toHaveBeenCalled();
+    expect(mockDailyCreate).toHaveBeenCalled();
+    expect(mockOpenFile).toHaveBeenCalledWith(expectedFile);
+    expect(mockSetPinned).not.toHaveBeenCalled();
+  });
+
+  it('opens and pins new notes when enabled', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.open = true;
+    settings.daily.pin = true;
 
     const expectedFile = new TFile();
     const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<
@@ -536,7 +579,8 @@ describe('Notes Provider', () => {
     settings.daily.available = true;
     settings.daily.enabled = true;
     settings.daily.closeExisting = true;
-    settings.daily.openAndPin = true;
+    settings.daily.open = true;
+    settings.daily.pin = true;
 
     const expectedFile = new TFile();
     const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<

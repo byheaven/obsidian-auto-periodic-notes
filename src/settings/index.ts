@@ -1,10 +1,15 @@
+import debug from '../log';
+import { periodicities } from '../constants';
+
 export type IPeriodicity = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 
 export interface IPeriodicitySettings {
   available: boolean;
   enabled: boolean;
   closeExisting: boolean;
-  openAndPin: boolean;
+  openAndPin?: boolean; // Deprecated: will be removed in a future breaking release
+  open: boolean;
+  pin: boolean;
 }
 
 export interface IDailySettings extends IPeriodicitySettings {
@@ -25,7 +30,8 @@ export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze(
   available: false,
   enabled: false,
   closeExisting: false,
-  openAndPin: false,
+  open: false,
+  pin: false,
 });
 
 export const DEFAULT_SETTINGS: ISettings = Object.freeze({
@@ -39,5 +45,18 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
 });
 
 export function applyDefaultSettings(savedSettings: ISettings): ISettings {
+  // Automatically migrate "openAndPin" setting into new structure
+  for (const periodicity of periodicities) {
+    if (
+      typeof savedSettings[periodicity] !== 'undefined' &&
+      typeof savedSettings[periodicity].openAndPin !== 'undefined'
+    ) {
+      savedSettings[periodicity].open = savedSettings[periodicity].openAndPin;
+      savedSettings[periodicity].pin = savedSettings[periodicity].openAndPin;
+      savedSettings[periodicity].openAndPin = undefined;
+      debug('When loading settings, migrated "openAndPin" settings into new structure');
+    }
+  }
+
   return Object.assign({}, DEFAULT_SETTINGS, savedSettings);
 }

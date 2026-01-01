@@ -1,6 +1,6 @@
 import { moment, Notice, type TFile, type WorkspaceLeaf, type App } from 'obsidian';
-import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
-import { ObsidianWorkspace } from 'src/types';
+import { IDailySettings, IPeriodicitySettings, ISettings } from '../settings';
+import { ObsidianWorkspace } from '../types';
 import debug from '../log';
 import {
   DailyNote,
@@ -150,14 +150,14 @@ export default class NotesProvider {
   }
 
   private async handleOpen(setting: IPeriodicitySettings, newNote: TFile): Promise<void> {
-    if (
-      setting.openAndPin &&
-      Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1
-    ) {
+    if (setting.open && Object.keys(this.getOpenWorkspaceLeaves()).indexOf(newNote.path) === -1) {
       debug('Opening note in new tab');
       const leaf = this.workspace.getLeaf(true);
       await leaf.openFile(newNote);
-      leaf.setPinned(true);
+      if (setting.pin) {
+        debug('Pinning note in new tab');
+        leaf.setPinned(true);
+      }
     }
   }
 }
