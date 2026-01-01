@@ -4,7 +4,7 @@
     "module": "ESNext",
     "target": "ES6",
     "strict": true,
-    "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": false,
     "moduleResolution": "node",
     "importHelpers": true,
     "isolatedModules": true,

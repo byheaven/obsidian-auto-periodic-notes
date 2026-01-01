@@ -1,4 +1,4 @@
-import { App, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
+import { App, TFile, WorkspaceLeaf } from 'obsidian';
 import { processTemplaterInFile } from '../templater';
 
 jest.mock('obsidian');
