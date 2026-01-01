@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-01-01
+
+### Added
+
+- feat: split open and pin setting into separate entries (ee396d3)
+- (8980e96)
+
+### Other
+
+- chore: update deps and add better build support (3b9f0cb)
+- (1461d9e)
+- chore: bump ncipollo/release-action from 1.12.0 to 1.20.0 (62683e0)
+- (7335805)
+- chore: bump im-open/code-coverage-report-generator (bfb7889)
+- (767c7e5)
+- chore(deps-dev): bump the typescript-eslint group with 2 updates (4c3d5f6)
+- (2c8fc4e)
+- chore(deps-dev): bump the jest group with 2 updates (85065d4)
+- (fd5e260)
+- chore(deps-dev): bump builtin-modules from 4.0.0 to 5.0.0 (243d84a)
+- (284da9c)
+- chore(deps-dev): bump the typescript-eslint group with 2 updates (9ca6e60)
+- (c5779b2)
+- chore: fix dependabot label (a16a767)
+- chore: ensure build is checked when pushing branches and opening PRs (ea87a39)
+
 ## [0.4.0] - 2025-11-01
 
 ### Added
