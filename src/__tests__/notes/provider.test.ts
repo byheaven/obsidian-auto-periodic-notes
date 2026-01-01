@@ -58,6 +58,8 @@ describe('Notes Provider', () => {
         open: false,
         pin: false,
       },
+      gitCommit: false,
+      gitCommitMessage: '',
     };
 
     sut = new NotesProvider(new Workspace(), new App(), TEST_WAIT_TIMEOUT);

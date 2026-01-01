@@ -18,6 +18,8 @@ export interface IDailySettings extends IPeriodicitySettings {
 
 export interface ISettings {
   alwaysOpen: boolean;
+  gitCommit: boolean;
+  gitCommitMessage: string;
   processTemplater: boolean;
   daily: IDailySettings;
   weekly: IPeriodicitySettings;
@@ -36,6 +38,8 @@ export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze(
 
 export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   alwaysOpen: false,
+  gitCommit: false,
+  gitCommitMessage: 'chore: latest notes from {DATE}',
   processTemplater: false,
   daily: { ...DEFAULT_PERIODICITY_SETTINGS, excludeWeekends: false },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
