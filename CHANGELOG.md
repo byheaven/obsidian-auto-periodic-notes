@@ -5,12 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-01-06
+
+### Other
+
+- chore: add manifest.json back into release, this was accidentally removed (1fe8ef0)
+- chore: fix release notes in build step (d40d7a7)
+- breaking: update to use latest periodic-notes-provider that includes breaking change (783ed09)
+- (3f06d72)
+
 ## [0.6.0] - 2026-01-01
 
 ### Added
 
 - feat: support automated git commits at 6pm daily (b038e5d)
 - (9c92f37)
+
+### Other
+
+- [skip ci] Update version to v0.6.0 (73c3500)
 
 ## [0.5.0] - 2026-01-01
 
