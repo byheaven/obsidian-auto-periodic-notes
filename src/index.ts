@@ -4,7 +4,7 @@ import {
   PERIODIC_NOTES_EVENT_SETTING_UPDATED,
   PeriodicNotesPluginAdapter,
 } from 'obsidian-periodic-notes-provider';
-import { SETTINGS_UPDATED } from './events';
+import { LOADED, SETTINGS_UPDATED } from './events';
 import debug from './log';
 import NotesProvider from './notes/provider';
 import { applyDefaultSettings, type ISettings } from './settings';
@@ -12,11 +12,14 @@ import AutoPeriodicNotesSettingsTab from './settings/tab';
 import type { ObsidianApp, ObsidianWorkspace } from './types';
 import { Git } from './git';
 
+const AUTO_TASKS_PLUGIN: string = 'auto-tasks';
+
 export default class AutoPeriodicNotes extends Plugin {
   public settings: ISettings;
   private periodicNotesPlugin: PeriodicNotesPluginAdapter;
   private notes: NotesProvider;
   private git: Git;
+  private initialRunStarted: boolean = false;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
@@ -32,10 +35,10 @@ export default class AutoPeriodicNotes extends Plugin {
 
     await this.loadSettings();
 
-    this.app.workspace.onLayoutReady(this.onLayoutReady.bind(this));
+    this.app.workspace.onLayoutReady(await this.onLayoutReady.bind(this));
   }
 
-  onLayoutReady(): void {
+  async onLayoutReady(): Promise<void> {
     if (!this.periodicNotesPlugin.isEnabled()) {
       new Notice(
         'The Periodic Notes plugin must be installed and available for Auto Periodic Notes to work.',
@@ -43,6 +46,8 @@ export default class AutoPeriodicNotes extends Plugin {
       );
       return;
     }
+
+    debug('Starting initial layout and load');
 
     // Watch for Periodic Notes settings changes
     const workspace: ObsidianWorkspace = this.app.workspace;
@@ -67,7 +72,6 @@ export default class AutoPeriodicNotes extends Plugin {
         this.git.checkForGitRepo();
       }, 300000)
     );
-    this.git.checkForGitRepo();
 
     // Register the standard check for new notes and run immediately
     this.registerInterval(
@@ -75,7 +79,35 @@ export default class AutoPeriodicNotes extends Plugin {
         this.notes.checkAndCreateNotes(this.settings);
       }, 300000)
     );
-    this.notes.checkAndCreateNotes(this.settings);
+
+    // Check for Auto Tasks plugin - this should load before this plugin
+    if ((this.app as ObsidianApp).plugins.enabledPlugins.has(AUTO_TASKS_PLUGIN)) {
+      debug(
+        'Detected Auto Tasks plugin, waiting for this to load before completing layout and load'
+      );
+      this.registerEvent(
+        workspace.on(`${AUTO_TASKS_PLUGIN}:loaded`, this.syncPeriodicNotesSettings.bind(this))
+      );
+
+      // Fallback to a 20 second timeout if there is no loaded event fired
+      window.setTimeout(this.initialRun.bind(this), 20000);
+    } else {
+      // Run initial load before calling event
+      this.initialRun();
+    }
+  }
+
+  async initialRun(): Promise<void> {
+    // Only ever run once
+    if (this.initialRunStarted) {
+      return;
+    }
+
+    this.initialRunStarted = true;
+    await this.git.checkForGitRepo();
+    await this.notes.checkAndCreateNotes(this.settings);
+    this.app.workspace.trigger(LOADED);
+    debug('Initial layout and load complete');
   }
 
   async loadSettings(): Promise<void> {
