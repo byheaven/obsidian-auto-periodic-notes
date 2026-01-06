@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-06
+
+### Added
+
+- feat: add detection for auto tasks plugin and automated wait (dd01446)
+- (fd549e8)
+
 ## [1.0.0] - 2026-01-06
 
 ### Other
@@ -13,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chore: fix release notes in build step (d40d7a7)
 - breaking: update to use latest periodic-notes-provider that includes breaking change (783ed09)
 - (3f06d72)
+- [skip ci] Update version to v1.0.0 (b32755c)
 
 ## [0.6.0] - 2026-01-01
 
