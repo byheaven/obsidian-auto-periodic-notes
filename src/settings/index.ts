@@ -52,6 +52,7 @@ export function applyDefaultSettings(savedSettings: ISettings): ISettings {
   // Automatically migrate "openAndPin" setting into new structure
   for (const periodicity of periodicities) {
     if (
+      savedSettings &&
       typeof savedSettings[periodicity] !== 'undefined' &&
       typeof savedSettings[periodicity].openAndPin !== 'undefined'
     ) {
