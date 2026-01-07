@@ -55,4 +55,16 @@ describe('settings', () => {
     expect(result.daily.open).toEqual(true);
     expect(result.daily.pin).toEqual(true);
   });
+
+  it('loads correctly with empty settings', () => {
+    const settings: ISettings = null as unknown as ISettings;
+
+    const result = applyDefaultSettings(settings);
+
+    expect(result.daily.available).toEqual(false);
+    expect(result.daily.enabled).toEqual(false);
+    expect(result.daily.closeExisting).toEqual(false);
+    expect(result.daily.open).toEqual(false);
+    expect(result.daily.pin).toEqual(false);
+  });
 });
