@@ -18,7 +18,7 @@ describe('Git', () => {
   beforeEach(() => {
     vault = jest.fn() as unknown as Vault;
     vault.adapter = new FileSystemAdapter();
-    vault.adapter.exists = jest.fn();
+    vault.adapter.exists = jest.fn().mockReturnValue(true);
     if (vault.adapter instanceof FileSystemAdapter) {
       vault.adapter.getBasePath = jest.fn().mockReturnValue('/mock/path');
     }
@@ -43,29 +43,8 @@ describe('Git', () => {
     jest.resetAllMocks();
   });
 
-  it('checks for repos and sets correctly', async () => {
-    jest.spyOn(vault.adapter, 'exists').mockResolvedValue(true);
-
-    expect(sut.isGitRepo()).toBe(false);
-
-    await sut.checkForGitRepo();
-
-    expect(sut.isGitRepo()).toBe(true);
-  });
-
-  it('does not commit changes when no git repo is detected', async () => {
-    jest.spyOn(vault.adapter, 'exists').mockResolvedValue(false);
-    await sut.checkForGitRepo();
-
-    await sut.commitChanges(settings);
-
-    expect(mockSpawn).not.toHaveBeenCalled();
-  });
-
   it('does not commit changes when setting is disabled', async () => {
     settings.gitCommit = false;
-    jest.spyOn(vault.adapter, 'exists').mockResolvedValue(true);
-    await sut.checkForGitRepo();
 
     await sut.commitChanges(settings);
 
@@ -73,22 +52,23 @@ describe('Git', () => {
   });
 
   it('does not commit changes when outside of time window', async () => {
-    jest.spyOn(vault.adapter, 'exists').mockResolvedValue(true);
-    await sut.checkForGitRepo();
-
     // Set time outside the window (18:00-18:04)
     const sutOutsideWindow = new Git(vault, moment('2025-01-01T17:59:00'));
-    await sutOutsideWindow.checkForGitRepo();
 
     await sutOutsideWindow.commitChanges(settings);
 
     expect(mockSpawn).not.toHaveBeenCalled();
   });
 
-  it('handles errors when committing changes', async () => {
-    jest.spyOn(vault.adapter, 'exists').mockResolvedValue(true);
-    await sut.checkForGitRepo();
+  it('does not commit changes when no git repo is detected', async () => {
+    jest.spyOn(vault.adapter, 'exists').mockResolvedValue(false);
 
+    await sut.commitChanges(settings);
+
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it('handles errors when committing changes', async () => {
     const commitPromise = sut.commitChanges(settings);
 
     // Simulate error on first spawn call (git add)
@@ -101,9 +81,6 @@ describe('Git', () => {
   });
 
   it('commits and pushes changes correctly', async () => {
-    jest.spyOn(vault.adapter, 'exists').mockResolvedValue(true);
-    await sut.checkForGitRepo();
-
     const commitPromise = sut.commitChanges(settings);
 
     // Simulate successful git add
