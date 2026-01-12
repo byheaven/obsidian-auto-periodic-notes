@@ -174,6 +174,28 @@ describe('Notes Provider', () => {
     expect(spyDailyCreate).not.toHaveBeenCalled();
   });
 
+  it('does not exclude other days when exclude weekends is turned on', async () => {
+    settings.daily.available = true;
+    settings.daily.enabled = true;
+    settings.daily.excludeWeekends = true;
+
+    const mockDailyIsPresent = DailyNote.prototype.isPresent as jest.MockedFunction<
+      typeof DailyNote.prototype.isPresent
+    >;
+    mockDailyIsPresent.mockImplementation(() => false);
+    const spyDailyCreate = jest.spyOn(DailyNote.prototype, 'create');
+
+    // Mock Date so moment's logic is untouched
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-20T12:00:00Z').getTime());
+
+    const sut = new NotesProvider(new Workspace(), new App());
+    await sut.checkAndCreateNotes(settings);
+
+    expect(DailyNote).toHaveBeenCalled();
+    expect(mockDailyIsPresent).toHaveBeenCalled();
+    expect(spyDailyCreate).toHaveBeenCalled();
+  });
+
   it('creates notes when missing', async () => {
     settings.daily.available = true;
     settings.daily.enabled = true;
