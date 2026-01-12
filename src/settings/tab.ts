@@ -2,16 +2,13 @@ import { App, PluginSettingTab, Setting, ToggleComponent } from 'obsidian';
 import { ISettings } from '.';
 import AutoPeriodicNotes from '..';
 import { periodicities } from '../constants';
-import { Git } from 'src/git';
 
 export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
   public plugin: AutoPeriodicNotes;
-  private git: Git;
 
-  constructor(app: App, plugin: AutoPeriodicNotes, git: Git) {
+  constructor(app: App, plugin: AutoPeriodicNotes) {
     super(app, plugin);
     this.plugin = plugin;
-    this.git = git;
   }
 
   display(): void {
@@ -66,30 +63,28 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
     }
 
     // Show git settings if within Git repo
-    if (this.git.isGitRepo()) {
-      this.containerEl.createEl('h3', { text: `Automatic git commits` });
-      new Setting(this.containerEl)
-        .setName('Enable automatic git commit at the end of each day (18:00/6pm)')
-        .setDesc('When enabled, automatically commit any changes within the vault.')
-        .addToggle((toggle) => {
-          toggle.setValue(settings.gitCommit).onChange(async (val) => {
-            settings.gitCommit = val;
-            await this.plugin.updateSettings(settings);
-          });
+    this.containerEl.createEl('h3', { text: `Automatic git commits` });
+    new Setting(this.containerEl)
+      .setName('Enable automatic git commit at the end of each day (18:00/6pm)')
+      .setDesc('When enabled, automatically commit any changes within the vault.')
+      .addToggle((toggle) => {
+        toggle.setValue(settings.gitCommit).onChange(async (val) => {
+          settings.gitCommit = val;
+          await this.plugin.updateSettings(settings);
         });
+      });
 
-      new Setting(this.containerEl)
-        .setName('Git commit message format')
-        .setDesc(
-          'Set the message to use when committing, where {DATE} will be replaced with the current date.'
-        )
-        .addTextArea((text) => {
-          text.setValue(settings.gitCommitMessage).onChange(async (val) => {
-            settings.gitCommitMessage = val;
-            await this.plugin.updateSettings(settings);
-          });
+    new Setting(this.containerEl)
+      .setName('Git commit message format')
+      .setDesc(
+        'Set the message to use when committing, where {DATE} will be replaced with the current date.'
+      )
+      .addTextArea((text) => {
+        text.setValue(settings.gitCommitMessage).onChange(async (val) => {
+          settings.gitCommitMessage = val;
+          await this.plugin.updateSettings(settings);
         });
-    }
+      });
 
     for (const periodicity of periodicities) {
       if (settings[periodicity].available) {

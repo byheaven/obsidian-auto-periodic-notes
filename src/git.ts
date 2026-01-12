@@ -1,35 +1,26 @@
 import { Moment } from 'moment';
-import { ISettings } from './settings';
-import { FileSystemAdapter, moment, Vault } from 'obsidian';
 import { spawn } from 'node:child_process';
+import { FileSystemAdapter, moment, Vault } from 'obsidian';
 import debug from './log';
+import { ISettings } from './settings';
 
 const FOLDER: string = '.git';
 
 export class Git {
   private vault: Vault;
   private now: Moment;
-  private gitRepo: boolean = false;
 
   constructor(vault: Vault, now?: Moment) {
     this.vault = vault;
     this.now = now || moment();
   }
 
-  isGitRepo(): boolean {
-    return this.gitRepo;
-  }
-
-  async checkForGitRepo() {
-    this.gitRepo = await this.vault.adapter.exists(FOLDER);
-    debug(`Setting git repo to ${this.gitRepo ? 'true' : 'false'}`);
-  }
-
   async commitChanges(settings: ISettings) {
-    if (!this.isGitRepo() || !settings.gitCommit || !this.getBasePath()) {
+    if (!settings.gitCommit || !this.getBasePath()) {
       return;
     }
 
+    debug('Checking if a git commit should be made');
     if (
       !this.now.isBetween(
         this.now.clone().set({ hour: 18, minute: 0, second: 0 }),
@@ -39,8 +30,14 @@ export class Git {
       return;
     }
 
+    const gitRepo = await this.vault.adapter.exists(FOLDER);
+    if (!gitRepo) {
+      debug('No git repo was found to commit');
+      return;
+    }
+
+    debug(`Starting git commit for folder: ${this.getBasePath()}`);
     try {
-      debug(this.getBasePath());
       debug('Staging changes in git');
       await this.runCommand(['add', '.']);
       debug('Committing changes in git');
