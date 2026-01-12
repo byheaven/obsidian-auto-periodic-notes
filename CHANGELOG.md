@@ -5,12 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-01-12
+
+### Fixed
+
+- fix: git commit was not working as the date/time was fixed by the moment creation (3c554ca)
+- (8ec2b10)
+
+### Other
+
+- chore: fix dependabot settings to use correct label (707f71f)
+- chore(deps-dev): bump the typescript-eslint group with 2 updates (c87e0d1)
+- (f58fc26)
+- chore: add assignee to dependabot tickets (73f051c)
+- chore: fix tab tests still using git repo checks (eb38eb6)
+- chore: restore branch coverage for notes test (e3a8af3)
+
 ## [1.1.1] - 2026-01-07
 
 ### Fixed
 
 - fix: default settings weren't loading for fresh install (7a57ba0)
 - (72e7756)
+
+### Other
+
+- [skip ci] Update version to v1.1.1 (f70385b)
 
 ## [1.1.0] - 2026-01-06
 
