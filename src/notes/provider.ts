@@ -374,62 +374,52 @@ export default class NotesProvider {
     }
   }
 
-  private async handleOpen(setting: IPeriodicitySettings, newNote: TFile, term?: string): Promise<void> {
-    const openLeaves = this.getOpenWorkspaceLeaves();
-    const isAlreadyOpen = Object.keys(openLeaves).indexOf(newNote.path) !== -1;
+  private async handleOpen(setting: IPeriodicitySettings, note: TFile, term?: string): Promise<void> {
+    if (!setting.openAndPin) {
+      return;
+    }
 
-    debug(`handleOpen called: openAndPin=${setting.openAndPin}, notePath=${newNote.path}, isAlreadyOpen=${isAlreadyOpen}, openLeavesCount=${Object.keys(openLeaves).length}`);
+    const shouldOpenAtFirstPosition = term === 'daily' &&
+      'openAtFirstPosition' in setting &&
+      (setting as any).openAtFirstPosition;
+    let leaf: WorkspaceLeaf | undefined = this.getOpenWorkspaceLeaves()[note.path];
 
-    if (setting.openAndPin && !isAlreadyOpen) {
-      debug('Opening note in new tab');
+    debug(`handleOpen called: notePath=${note.path}, isAlreadyOpen=${!!leaf}`);
 
-      // Check if this is a daily note with openAtFirstPosition enabled
-      const shouldOpenAtFirstPosition = term === 'daily' &&
-        'openAtFirstPosition' in setting &&
-        (setting as any).openAtFirstPosition;
+    if (!leaf) {
+      leaf = this.openNewLeaf(shouldOpenAtFirstPosition);
+      await leaf.openFile(note);
+    }
 
-      let leaf: WorkspaceLeaf;
+    leaf.setPinned(true);
 
-      if (shouldOpenAtFirstPosition) {
-        // Signal to the monkey patch that we're creating a daily note
-        this.plugin.setDailyNoteCreation(true);
+    if (shouldOpenAtFirstPosition) {
+      this.moveToFirstPosition(leaf);
+    }
+  }
 
-        try {
-          // Use standard getLeaf - our monkey patch will intercept and create at first position
-          leaf = this.workspace.getLeaf('tab');
-          debug('Used monkey patch to create daily note leaf at first position');
-        } finally {
-          // Always clear the signal
-          this.plugin.setDailyNoteCreation(false);
-        }
-      } else {
-        leaf = this.workspace.getLeaf(true);
-      }
+  private openNewLeaf(atFirstPosition: boolean): WorkspaceLeaf {
+    if (!atFirstPosition) {
+      return this.workspace.getLeaf(true);
+    }
 
-      await leaf.openFile(newNote);
+    // Signal to the monkey patch that we're creating a daily note
+    this.plugin.setDailyNoteCreation(true);
+    try {
+      return this.workspace.getLeaf('tab');
+    } finally {
+      this.plugin.setDailyNoteCreation(false);
+    }
+  }
 
-      debug(`Before setPinned - leaf parent has ${(leaf.parent as any)?.children?.length || 0} children`);
-
-      leaf.setPinned(true);
-
-      debug(`After setPinned - leaf parent has ${(leaf.parent as any)?.children?.length || 0} children`);
-
-      // If this is a daily note that should be at first position, ensure it stays there after pinning
-      if (shouldOpenAtFirstPosition) {
-        const parent = leaf.parent as any;
-        if (parent && parent.children) {
-          const currentIndex = parent.children.indexOf(leaf);
-          debug(`Daily note leaf is at index ${currentIndex} after pinning, moving to index 0`);
-
-          if (currentIndex > 0) {
-            // Move the leaf to first position
-            parent.children.splice(currentIndex, 1);
-            parent.children.unshift(leaf);
-            parent.recomputeChildrenDimensions();
-            debug(`Moved daily note leaf to first position`);
-          }
-        }
-      }
+  private moveToFirstPosition(leaf: WorkspaceLeaf): void {
+    const tabGroup = leaf.parent as any;
+    const index = tabGroup?.children?.indexOf(leaf) ?? -1;
+    debug(`Daily note leaf is at index ${index}`);
+    if (index > 0) {
+      tabGroup.removeChild(leaf);
+      tabGroup.insertChild(0, leaf);
+      debug('Moved daily note leaf to first position');
     }
   }
 
