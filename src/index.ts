@@ -60,18 +60,22 @@ export default class AutoPeriodicNotes extends Plugin {
     // Add the settings tab
     this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this));
 
-    // Execute appropriate startup logic based on current time vs scheduled time
+    this.runStartupLogic();
+    this.scheduleAllDailyChecks();
+    this.register(this.clearAllScheduledTimeouts.bind(this));
+
+    // Set up Visibility API listener to detect sleep/wake recovery
+    this.setupVisibilityListener();
+  }
+
+  // Execute appropriate startup logic based on current time vs scheduled time
+  private runStartupLogic(): void {
     this.executeStartupLogic()
       .catch(error => {
         debug(`Error during startup: ${error.message}`);
         console.error('Auto Periodic Notes: Failed during startup', error);
         new Notice('Auto Periodic Notes: Failed during startup. Check console for details.');
       });
-    this.scheduleAllDailyChecks();
-    this.register(this.clearAllScheduledTimeouts.bind(this));
-
-    // Set up Visibility API listener to detect sleep/wake recovery
-    this.setupVisibilityListener();
   }
 
   async loadSettings(): Promise<void> {
@@ -202,9 +206,14 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   public updateDeviceSettings(changes: Partial<IDeviceSettings>): void {
+    const wasCreatingNotes = this.canCreateNotes();
     this.persistDeviceSettings(changes);
     debug(`Device settings changed to ${JSON.stringify(this.deviceSettings)}, rescheduling...`);
     this.scheduleDailyCheck();
+    if (!wasCreatingNotes && this.canCreateNotes()) {
+      debug('Note creation turned on for this device, catching up');
+      this.runStartupLogic();
+    }
   }
 
   private persistDeviceSettings(changes: Partial<IDeviceSettings>): void {
@@ -378,6 +387,11 @@ export default class AutoPeriodicNotes extends Plugin {
       // This ensures consistent behavior: always create tomorrow's note and unpin old notes
       console.log('[Auto Periodic Notes] Creating next period notes (tomorrow)');
       await this.notes.checkAndCreateNextPeriodNotes(this.settings, { scheduleName: 'scheduledTime' });
+
+      if (!this.canCreateNotes()) {
+        debug('[Execution] Note creation was turned off during the task, not marking it as executed');
+        return;
+      }
 
       // Mark execution date and persist to settings
       this.setLastExecutionDate(todayString);

@@ -245,6 +245,18 @@ describe('Daily Note Scheduling', () => {
       expect(sut.saveData).not.toHaveBeenCalled();
     });
 
+    it('catches up on startup creation when the switch is turned on', async () => {
+      const { sut, startupSpy } = await startPlugin(undefined);
+      expect(startupSpy).toHaveBeenCalledTimes(1);
+
+      sut.updateDeviceSettings({ createNotes: true });
+      await jest.advanceTimersByTimeAsync(0);
+      sut.updateDeviceSettings({ scheduledTime: '22:00' });
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(startupSpy).toHaveBeenCalledTimes(2);
+    });
+
     it('stops scheduling once creation is turned off on the device', async () => {
       const advancedData = {
         ...DEFAULT_SETTINGS,
