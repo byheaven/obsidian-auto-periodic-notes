@@ -1,16 +1,18 @@
 import { Notice, Plugin, type PluginManifest, Workspace, WorkspaceLeaf } from 'obsidian';
 import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
 import { around } from 'monkey-around';
-import * as os from 'os';
 import { SETTINGS_UPDATED } from './events';
 import debug, { setDebugEnabled } from './log';
 import NotesProvider from './notes/provider';
 import { applyDefaultSettings, type ISettings } from './settings';
+import { DEFAULT_DEVICE_SETTINGS, type IDeviceSettings, type LocalStorageApp, loadDeviceSettings, saveDeviceSettings, TIME_REGEX } from './settings/device';
 import AutoPeriodicNotesSettingsTab from './settings/tab';
 import type { ObsidianApp, ObsidianWorkspace } from './types';
 
 export default class AutoPeriodicNotes extends Plugin {
   public settings: ISettings;
+  public deviceSettings: IDeviceSettings;
+  private localStorage: LocalStorageApp;
   private periodicNotesPlugin: PeriodicNotesPluginAdapter;
   private notes: NotesProvider;
   private monkeyPatchCleanup?: () => void;
@@ -24,6 +26,8 @@ export default class AutoPeriodicNotes extends Plugin {
     super(app, manifest);
 
     this.settings = {} as ISettings;
+    this.deviceSettings = { ...DEFAULT_DEVICE_SETTINGS };
+    this.localStorage = app;
     this.periodicNotesPlugin = new PeriodicNotesPluginAdapter(app as ObsidianAppWithPlugins);
     this.notes = new NotesProvider(app.workspace, app, this);
   }
@@ -56,13 +60,7 @@ export default class AutoPeriodicNotes extends Plugin {
     // Add the settings tab
     this.addSettingTab(new AutoPeriodicNotesSettingsTab(this.app, this));
 
-    // Execute appropriate startup logic based on current time vs scheduled time
-    this.executeStartupLogic()
-      .catch(error => {
-        debug(`Error during startup: ${error.message}`);
-        console.error('Auto Periodic Notes: Failed during startup', error);
-        new Notice('Auto Periodic Notes: Failed during startup. Check console for details.');
-      });
+    this.runStartupLogic();
     this.scheduleAllDailyChecks();
     this.register(this.clearAllScheduledTimeouts.bind(this));
 
@@ -70,10 +68,22 @@ export default class AutoPeriodicNotes extends Plugin {
     this.setupVisibilityListener();
   }
 
+  // Execute appropriate startup logic based on current time vs scheduled time
+  private runStartupLogic(): void {
+    this.executeStartupLogic()
+      .catch(error => {
+        debug(`Error during startup: ${error.message}`);
+        console.error('Auto Periodic Notes: Failed during startup', error);
+        new Notice('Auto Periodic Notes: Failed during startup. Check console for details.');
+      });
+  }
+
   async loadSettings(): Promise<void> {
     this.settings = applyDefaultSettings(await this.loadData());
+    this.deviceSettings = loadDeviceSettings(this.localStorage, this.deviceSettingsKey());
     setDebugEnabled(this.settings.debug);
     debug('Loaded settings: ' + JSON.stringify(this.settings));
+    debug('Loaded device settings: ' + JSON.stringify(this.deviceSettings));
   }
 
   async updateSettings(settings: ISettings): Promise<void> {
@@ -89,6 +99,8 @@ export default class AutoPeriodicNotes extends Plugin {
     debug('Saved settings: ' + JSON.stringify(this.settings));
   }
 
+  // Availability is derived from the Periodic Notes plugin on every load, so it is kept in memory
+  // rather than written to the synced data.json from every device.
   private syncPeriodicNotesSettings(): void {
     debug('Received new settings from Periodic Notes plugin');
     const pluginSettings = this.periodicNotesPlugin.convertSettings();
@@ -97,7 +109,7 @@ export default class AutoPeriodicNotes extends Plugin {
     this.settings.monthly.available = pluginSettings.monthly.available;
     this.settings.quarterly.available = pluginSettings.quarterly.available;
     this.settings.yearly.available = pluginSettings.yearly.available;
-    this.updateSettings(this.settings);
+    this.onSettingsUpdate();
   }
 
   private onSettingsUpdate(): void {
@@ -180,63 +192,48 @@ export default class AutoPeriodicNotes extends Plugin {
     this.isDailyNoteCreation = isCreating;
   }
 
-  // Get unique device identifier based on hostname
-  public getDeviceId(): string {
-    return os.hostname();
+  private deviceSettingsKey(): string {
+    return `${this.manifest.id}-device`;
   }
 
-  // Get device-specific scheduled time, falling back to global setting
-  public getDeviceScheduledTime(): string {
-    const deviceId = this.getDeviceId();
-    return this.settings.deviceSettings?.[deviceId]?.scheduledTime
-      ?? this.settings.daily.scheduledTime
-      ?? '';
+  public canCreateNotes(): boolean {
+    return this.deviceSettings.createNotes;
   }
 
-  // Set device-specific scheduled time
-  public async setDeviceScheduledTime(time: string): Promise<void> {
-    const deviceId = this.getDeviceId();
-    if (!this.settings.deviceSettings) {
-      this.settings.deviceSettings = {};
-    }
-    if (!this.settings.deviceSettings[deviceId]) {
-      this.settings.deviceSettings[deviceId] = { scheduledTime: '' };
-    }
-    this.settings.deviceSettings[deviceId].scheduledTime = time;
-    await this.saveData(this.settings);
-    this.onSettingsUpdate();
+  // Only a device that creates notes runs the scheduled task.
+  private getScheduledTime(): string {
+    return this.canCreateNotes() ? this.deviceSettings.scheduledTime : '';
+  }
 
-    // Reschedule custom time with new device-specific time
-    debug(`Device ${deviceId} scheduled time changed to ${time}, rescheduling...`);
+  public updateDeviceSettings(changes: Partial<IDeviceSettings>): void {
+    const wasCreatingNotes = this.canCreateNotes();
+    this.persistDeviceSettings(changes);
+    debug(`Device settings changed to ${JSON.stringify(this.deviceSettings)}, rescheduling...`);
     this.scheduleDailyCheck();
+    if (!wasCreatingNotes && this.canCreateNotes()) {
+      debug('Note creation turned on for this device, catching up');
+      this.runStartupLogic();
+    }
   }
 
-  // Get device-specific last execution date
+  private persistDeviceSettings(changes: Partial<IDeviceSettings>): void {
+    this.deviceSettings = { ...this.deviceSettings, ...changes };
+    saveDeviceSettings(this.localStorage, this.deviceSettingsKey(), this.deviceSettings);
+  }
+
   private getLastExecutionDate(): string | null {
-    const deviceId = this.getDeviceId();
-    return this.settings.deviceSettings?.[deviceId]?.lastExecutionDate ?? null;
+    return this.deviceSettings.lastExecutionDate;
   }
 
-  // Set device-specific last execution date
-  private async setLastExecutionDate(date: string): Promise<void> {
-    const deviceId = this.getDeviceId();
-    if (!this.settings.deviceSettings) {
-      this.settings.deviceSettings = {};
-    }
-    if (!this.settings.deviceSettings[deviceId]) {
-      this.settings.deviceSettings[deviceId] = { scheduledTime: '' };
-    }
-    this.settings.deviceSettings[deviceId].lastExecutionDate = date;
-    await this.saveData(this.settings);
+  private setLastExecutionDate(date: string): void {
+    this.persistDeviceSettings({ lastExecutionDate: date });
   }
 
   private scheduleDailyCheck(): void {
     const dailySettings = this.settings.daily;
-    // Use device-specific scheduled time
-    const scheduledTime = this.getDeviceScheduledTime();
-    const deviceId = this.getDeviceId();
+    const scheduledTime = this.getScheduledTime();
 
-    debug(`[scheduledTime] Checking settings for device ${deviceId}: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
+    debug(`[scheduledTime] Checking settings: createNotes=${this.canCreateNotes()}, enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
 
     // Only schedule if enabled AND has valid time
     if (!dailySettings.enableAdvancedScheduling || !scheduledTime) {
@@ -245,10 +242,7 @@ export default class AutoPeriodicNotes extends Plugin {
       return;
     }
 
-
-
     // Validate time format before parsing
-    const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
     if (!TIME_REGEX.test(scheduledTime)) {
       debug(`[scheduledTime] Not scheduling - invalid time format: ${scheduledTime}`);
       this.clearScheduledTimeout('scheduledTime');
@@ -338,7 +332,7 @@ export default class AutoPeriodicNotes extends Plugin {
       return;
     }
 
-    const scheduledTime = this.getDeviceScheduledTime();
+    const scheduledTime = this.getScheduledTime();
     if (!scheduledTime) {
       debug('[Visibility] No scheduled time configured, skipping');
       return;
@@ -394,8 +388,13 @@ export default class AutoPeriodicNotes extends Plugin {
       console.log('[Auto Periodic Notes] Creating next period notes (tomorrow)');
       await this.notes.checkAndCreateNextPeriodNotes(this.settings, { scheduleName: 'scheduledTime' });
 
+      if (!this.canCreateNotes()) {
+        debug('[Execution] Note creation was turned off during the task, not marking it as executed');
+        return;
+      }
+
       // Mark execution date and persist to settings
-      await this.setLastExecutionDate(todayString);
+      this.setLastExecutionDate(todayString);
       debug(`[Execution] Marked and persisted execution date: ${todayString}`);
 
       console.log(`[Auto Periodic Notes] Scheduled task completed successfully`);
@@ -419,7 +418,7 @@ export default class AutoPeriodicNotes extends Plugin {
       return;
     }
 
-    const scheduledTime = this.getDeviceScheduledTime();
+    const scheduledTime = this.getScheduledTime();
     if (!scheduledTime) {
       debug('[Startup] No scheduled time configured, using today startup logic');
       await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
@@ -452,7 +451,7 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private parseScheduledTime(timeString: string): [number, number] {
-    const match = timeString.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    const match = timeString.match(TIME_REGEX);
     if (!match) {
       debug(`Invalid scheduled time: ${timeString}, using default 00:00`);
       return [0, 2];

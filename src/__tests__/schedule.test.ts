@@ -10,6 +10,7 @@ describe('Daily Note Scheduling', () => {
   let manifest: PluginManifest;
   let plugin: AutoPeriodicNotesTestable;
   let checkAndCreateNotesSpy: jest.SpyInstance;
+  let localStorage: Record<string, unknown>;
 
   beforeEach(async () => {
     // Reset timers before each test
@@ -22,6 +23,9 @@ describe('Daily Note Scheduling', () => {
     workspace.trigger = jest.fn();
     workspace.on = jest.fn();
     app.workspace = workspace;
+    localStorage = {};
+    app.loadLocalStorage = jest.fn((key: string) => localStorage[key] ?? null);
+    app.saveLocalStorage = jest.fn((key: string, value: unknown) => { localStorage[key] = value; });
 
     manifest = JSON.parse(readFileSync(__dirname + '/../../manifest.json', 'utf-8'));
     plugin = new AutoPeriodicNotesTestable(app, manifest);
@@ -163,28 +167,8 @@ describe('Daily Note Scheduling', () => {
     freshPlugin.settings.daily.enableAdvancedScheduling = true;
     freshPlugin.settings.daily.available = true;
 
-    // Set device-specific scheduled time
-    const deviceId = freshPlugin.getDeviceId();
-    if (!freshPlugin.settings.deviceSettings) {
-      freshPlugin.settings.deviceSettings = {};
-    }
-    freshPlugin.settings.deviceSettings[deviceId] = { scheduledTime: '22:30' };
-
-    // Mock periodicNotesPlugin to be enabled
-    const periodicPlugin = freshPlugin.getPeriodicNotesPlugin();
-    periodicPlugin.isEnabled = jest.fn().mockReturnValue(true);
-    periodicPlugin.convertSettings = jest.fn().mockReturnValue({
-      daily: { available: true },
-      weekly: { available: false },
-      monthly: { available: false },
-      quarterly: { available: false },
-      yearly: { available: false },
-    });
-
-    // Mock registerEvent method
-    freshPlugin.registerEvent = jest.fn();
-    freshPlugin.addSettingTab = jest.fn();
-    freshPlugin.register = jest.fn();
+    freshPlugin.updateDeviceSettings({ createNotes: true, scheduledTime: '22:30' });
+    prepareLayoutReady(freshPlugin);
 
     // Spy on checkAndCreateNotes for fresh plugin
     const freshCheckSpy = jest.spyOn(freshPlugin.getNotesProvider(), 'checkAndCreateNotes');
@@ -197,25 +181,131 @@ describe('Daily Note Scheduling', () => {
     // Should have scheduled next check (now that advanced scheduling is enabled)
     expect(jest.getTimerCount()).toBeGreaterThan(0);
   });
+
+  describe('device-local note creation', () => {
+    const deviceKey = () => `${manifest.id}-device`;
+
+    async function startPlugin(storedDeviceSettings: unknown, savedData: unknown = DEFAULT_SETTINGS) {
+      if (storedDeviceSettings !== undefined) {
+        localStorage[deviceKey()] = storedDeviceSettings;
+      }
+      const sut = new AutoPeriodicNotesTestable(app, manifest, savedData);
+      await sut.loadSettings();
+      prepareLayoutReady(sut);
+      const startupSpy = jest.spyOn(sut.getNotesProvider(), 'checkAndCreateNotes').mockResolvedValue(undefined);
+      const nextPeriodSpy = jest.spyOn(sut.getNotesProvider(), 'checkAndCreateNextPeriodNotes').mockResolvedValue(undefined);
+      sut.onLayoutReady();
+      await jest.advanceTimersByTimeAsync(0);
+      return { sut, startupSpy, nextPeriodSpy };
+    }
+
+    it('is off by default and never schedules creation, even with times left in synced data.json', async () => {
+      jest.setSystemTime(new Date('2025-11-29T23:00:00'));
+      const legacyData = {
+        ...DEFAULT_SETTINGS,
+        daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true, scheduledTime: '22:30' },
+        deviceSettings: { 'some-host': { scheduledTime: '22:00', lastExecutionDate: '2025-11-28' } },
+      };
+
+      const { sut, startupSpy, nextPeriodSpy } = await startPlugin(undefined, legacyData);
+
+      expect(sut.canCreateNotes()).toBe(false);
+      expect(startupSpy).toHaveBeenCalledTimes(1);
+      expect(nextPeriodSpy).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+      expect(sut.saveData).not.toHaveBeenCalled();
+      expect(app.saveLocalStorage).not.toHaveBeenCalled();
+    });
+
+    it('drops legacy device fields from the synced settings', async () => {
+      const legacyData = {
+        ...DEFAULT_SETTINGS,
+        daily: { ...DEFAULT_SETTINGS.daily, scheduledTime: '22:30' },
+        deviceSettings: { 'some-host': { scheduledTime: '22:00' } },
+      };
+
+      const { sut } = await startPlugin(undefined, legacyData);
+
+      expect(sut.settings).not.toHaveProperty('deviceSettings');
+      expect(sut.settings.daily).not.toHaveProperty('scheduledTime');
+    });
+
+    it('runs the scheduled task on a creating device and records the run only in local storage', async () => {
+      jest.setSystemTime(new Date('2025-11-29T21:59:00'));
+      const advancedData = {
+        ...DEFAULT_SETTINGS,
+        daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true },
+      };
+
+      const { sut, nextPeriodSpy } = await startPlugin({ createNotes: true, scheduledTime: '22:00', lastExecutionDate: null }, advancedData);
+      await jest.advanceTimersByTimeAsync(60 * 1000);
+
+      expect(nextPeriodSpy).toHaveBeenCalledTimes(1);
+      expect(localStorage[deviceKey()]).toEqual({ createNotes: true, scheduledTime: '22:00', lastExecutionDate: '2025-11-29' });
+      expect(sut.saveData).not.toHaveBeenCalled();
+    });
+
+    it('catches up on startup creation when the switch is turned on', async () => {
+      const { sut, startupSpy } = await startPlugin(undefined);
+      expect(startupSpy).toHaveBeenCalledTimes(1);
+
+      sut.updateDeviceSettings({ createNotes: true });
+      await jest.advanceTimersByTimeAsync(0);
+      sut.updateDeviceSettings({ scheduledTime: '22:00' });
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(startupSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops scheduling once creation is turned off on the device', async () => {
+      const advancedData = {
+        ...DEFAULT_SETTINGS,
+        daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true },
+      };
+      const { sut, nextPeriodSpy } = await startPlugin({ createNotes: true, scheduledTime: '22:00', lastExecutionDate: null }, advancedData);
+      expect(jest.getTimerCount()).toBe(1);
+
+      sut.updateDeviceSettings({ createNotes: false });
+      await jest.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+
+      expect(jest.getTimerCount()).toBe(0);
+      expect(nextPeriodSpy).not.toHaveBeenCalled();
+      expect(localStorage[deviceKey()]).toEqual({ createNotes: false, scheduledTime: '22:00', lastExecutionDate: null });
+      expect(sut.saveData).not.toHaveBeenCalled();
+    });
+  });
 });
+
+function prepareLayoutReady(plugin: AutoPeriodicNotesTestable): void {
+  const periodicPlugin = plugin.getPeriodicNotesPlugin();
+  periodicPlugin.isEnabled = jest.fn().mockReturnValue(true);
+  periodicPlugin.convertSettings = jest.fn().mockReturnValue({
+    daily: { available: true },
+    weekly: { available: false },
+    monthly: { available: false },
+    quarterly: { available: false },
+    yearly: { available: false },
+  });
+  plugin.registerEvent = jest.fn();
+  plugin.addSettingTab = jest.fn();
+  plugin.register = jest.fn();
+}
 
 class AutoPeriodicNotesTestable extends AutoPeriodicNotes {
   public registerEvent!: (eventRef: EventRef) => void;
   public addSettingTab!: (settingTab: PluginSettingTab) => void;
   public register!: (cb: () => unknown) => void;
 
-  constructor(app: ObsidianApp, manifest: PluginManifest) {
+  public saveData = jest.fn((data: unknown): Promise<void> => Promise.resolve());
+
+  constructor(app: ObsidianApp, manifest: PluginManifest, private savedData: unknown = DEFAULT_SETTINGS) {
     super(app, manifest);
     this.app = app;
     this.manifest = manifest;
   }
 
   loadData(): Promise<unknown> {
-    return Promise.resolve(DEFAULT_SETTINGS);
-  }
-
-  saveData(data: unknown): Promise<void> {
-    return Promise.resolve();
+    return Promise.resolve(JSON.parse(JSON.stringify(this.savedData)));
   }
 
   // Expose private properties for testing

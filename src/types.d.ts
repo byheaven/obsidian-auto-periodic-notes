@@ -1,4 +1,5 @@
 import { App, EventRef, Plugin, Workspace } from 'obsidian';
+import type { LocalStorageApp } from './settings/device';
 
 export class PluginSettingTab {}
 
@@ -10,7 +11,7 @@ export interface CommunityPluginManager {
 export type ObsidianAppWithPlugins = {
   plugins: CommunityPluginManager;
 };
-export type ObsidianApp = App & ObsidianAppWithPlugins;
+export type ObsidianApp = App & ObsidianAppWithPlugins & LocalStorageApp;
 export type ObsidianWorkspaceWithOn = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on(name: string, callback: () => void, ctx?: any): EventRef;

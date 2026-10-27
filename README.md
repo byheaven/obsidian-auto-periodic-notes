@@ -24,6 +24,12 @@ This plugin respects the settings of the Periodic Notes plugin, creating your no
 
 Automatic creation can be toggled on and off for each of the supported note types, these are only shown if you have enabled and configured these notes within the Periodic Notes plugin. Within each note type, you can set whether to open and pin the note automatically, or whether to simply create it in the background, showing a notice when complete.
 
+### Creating notes on one device only
+
+Notes are created only on devices where **Create notes on this device** is turned on. It is off by default, so a vault synced across several devices (for example with Obsidian Sync) gets each note from a single device instead of duplicate or conflicting copies. Devices with it off only open and pin notes that already exist.
+
+This switch, the custom scheduled time, and the record of the last scheduled run are stored in the device's local storage and are never synced. Turn the switch on, and set the scheduled time, on the one device that should create notes.
+
 ## Development
 
 This plugin has been developed using Typescript with the Obsidian and Periodic Notes APIs and Jest for testing.

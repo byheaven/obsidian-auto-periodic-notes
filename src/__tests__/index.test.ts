@@ -18,6 +18,8 @@ describe('AutoPeriodicNotes', () => {
     workspace.onLayoutReady = jest.fn();
     workspace.trigger = jest.fn();
     app.workspace = workspace;
+    app.loadLocalStorage = jest.fn().mockReturnValue(null);
+    app.saveLocalStorage = jest.fn();
     manifest = JSON.parse(readFileSync(__dirname + '/../../manifest.json', 'utf-8'));
     sut = new AutoPeriodicNotesTestable(app, manifest);
   });
