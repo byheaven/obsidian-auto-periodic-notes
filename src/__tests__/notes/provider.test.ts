@@ -119,7 +119,6 @@ describe('Notes Provider', () => {
         excludeWeekends: false,
         openAtFirstPosition: false,
         enableAdvancedScheduling: false,
-        scheduledTime: "00:02",
         createTomorrowsNote: false,
         unpinOldDailyNotes: false,
       },
@@ -147,7 +146,6 @@ describe('Notes Provider', () => {
         closeExisting: false,
         openAndPin: false,
       },
-      deviceSettings: {},
     };
 
     const mockApp = {
@@ -156,7 +154,7 @@ describe('Notes Provider', () => {
         getAbstractFileByPath: jest.fn().mockReturnValue(null),
       },
     } as any;
-    mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
     sut = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
   });
 
@@ -255,7 +253,7 @@ describe('Notes Provider', () => {
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-19T12:00:00Z').getTime());
 
     const mockApp = { workspace: new Workspace() } as any;
-    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
     const sut = new NotesProvider(new Workspace(), mockApp, mockPlugin);
     await sut.checkAndCreateNotes(settings);
 
@@ -324,7 +322,7 @@ describe('Notes Provider', () => {
       read: jest.fn().mockResolvedValue('file content'),
     };
 
-    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
     const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithTemplater.checkAndCreateNotes(settings);
@@ -376,7 +374,7 @@ describe('Notes Provider', () => {
       read: jest.fn().mockResolvedValue('file content'),
     };
 
-    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
     const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithTemplater.checkAndCreateNotes(settings);
@@ -716,7 +714,7 @@ describe('Notes Provider', () => {
     const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
     mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
 
-    const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
     const sutWithVault = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithVault.checkAndCreateNotes(settings, { scheduleName: 'scheduledTime' });
@@ -875,7 +873,7 @@ describe('Notes Provider', () => {
       const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
       mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
 
-      const mockPlugin = { setDailyNoteCreation: jest.fn() } as any;
+      const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
       const sutWithVault = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
       await sutWithVault.checkAndCreateNextPeriodNotes(settings, { scheduleName: 'scheduledTime' });
@@ -884,6 +882,66 @@ describe('Notes Provider', () => {
       expect(createWeeklyNote).not.toHaveBeenCalled();
       // Should open the synced file
       expect(mockOpenFile).toHaveBeenCalledWith(syncedFile);
+    });
+  });
+
+  describe('On a device that does not create notes', () => {
+    const periodicities = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'] as const;
+
+    beforeEach(() => {
+      mockPlugin.canCreateNotes.mockReturnValue(false);
+      for (const periodicity of periodicities) {
+        settings[periodicity].available = true;
+        settings[periodicity].enabled = true;
+      }
+    });
+
+    it('does not create missing notes on startup', async () => {
+      const noteClasses = [DailyNote, WeeklyNote, MonthlyNote, QuarterlyNote, YearlyNote];
+      for (const cls of noteClasses) {
+        (cls.prototype.isPresent as jest.Mock).mockImplementation(() => false);
+      }
+
+      await sut.checkAndCreateNotes(settings, { scheduleName: 'startup' });
+
+      for (const cls of noteClasses) {
+        expect(cls.prototype.create).not.toHaveBeenCalled();
+      }
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
+    it('does not create next period notes at the scheduled time', async () => {
+      const notesInterface = require('obsidian-daily-notes-interface');
+      const creators = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
+      for (const name of creators) {
+        notesInterface[`get${name}Note`].mockReturnValue(null);
+      }
+
+      await sut.checkAndCreateNextPeriodNotes(settings, { scheduleName: 'scheduledTime' });
+
+      for (const name of creators) {
+        expect(notesInterface[`create${name}Note`]).not.toHaveBeenCalled();
+      }
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
+    it('still opens and pins a daily note that already exists', async () => {
+      settings.alwaysOpen = true;
+      settings.daily.openAndPin = true;
+
+      const existingFile = new TFile();
+      (DailyNote.prototype.isPresent as jest.Mock).mockImplementation(() => true);
+      (DailyNote.prototype.getCurrent as jest.Mock).mockImplementation(() => existingFile);
+      (Workspace.prototype.iterateAllLeaves as jest.Mock).mockImplementation(() => {});
+      const mockOpenFile = (WorkspaceLeaf.prototype.openFile as jest.Mock).mockImplementation(() => Promise.resolve());
+      const mockSetPinned = (WorkspaceLeaf.prototype.setPinned as jest.Mock).mockImplementation(() => {});
+      (Workspace.prototype.getLeaf as jest.Mock).mockImplementation(() => new WorkspaceLeaf());
+
+      await sut.checkAndCreateNotes(settings, { scheduleName: 'startup' });
+
+      expect(DailyNote.prototype.create).not.toHaveBeenCalled();
+      expect(mockOpenFile).toHaveBeenCalledWith(existingFile);
+      expect(mockSetPinned).toHaveBeenCalledWith(true);
     });
   });
 

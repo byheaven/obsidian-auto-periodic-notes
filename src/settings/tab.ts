@@ -1,5 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import { IPeriodicity, ISettings } from '.';
+import { TIME_REGEX } from './device';
 import AutoPeriodicNotes from '..';
 
 export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
@@ -33,6 +34,17 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
 
     // === General Settings ===
     this.containerEl.createEl('h3', { text: 'General settings' });
+
+    new Setting(this.containerEl)
+      .setName('Create notes on this device')
+      .setDesc('Only devices with this turned on create periodic notes; other devices only open notes that already exist. Stored on this device only and not synced.')
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.deviceSettings.createNotes)
+          .onChange((val) => {
+            this.plugin.updateDeviceSettings({ createNotes: val });
+          });
+      });
 
     new Setting(this.containerEl)
       .setName('Enable debug logging')
@@ -190,21 +202,16 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
 
     // Show dependent settings only if advanced scheduling is enabled
     if (settings.daily.enableAdvancedScheduling) {
-      // Get device-specific scheduled time
-      const deviceId = this.plugin.getDeviceId();
-      const deviceScheduledTime = this.plugin.getDeviceScheduledTime();
-
       new Setting(advancedContainer)
-        .setName(`Scheduled time (${deviceId})`)
-        .setDesc('Time for the custom check (24-hour format). This setting is device-specific and will not affect other devices.')
+        .setName('Scheduled time on this device')
+        .setDesc('Time for the custom check (24-hour format), used only while this device creates notes. Stored on this device only and not synced.')
         .addText((text) => {
           text
             .setPlaceholder('HH:mm (e.g., 22:30)')
-            .setValue(deviceScheduledTime)
-            .onChange(async (val) => {
-              const isValid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(val);
-              if (isValid || val === '') {
-                await this.plugin.setDeviceScheduledTime(val || '22:00');
+            .setValue(this.plugin.deviceSettings.scheduledTime)
+            .onChange((val) => {
+              if (TIME_REGEX.test(val) || val === '') {
+                this.plugin.updateDeviceSettings({ scheduledTime: val });
               } else {
                 new Notice('Invalid time format. Use HH:mm (e.g., 22:30)');
               }

@@ -16,14 +16,8 @@ export interface IDailySettings extends IPeriodicitySettings {
   excludeWeekends: boolean;
   openAtFirstPosition: boolean;
   enableAdvancedScheduling: boolean;
-  scheduledTime: string;  // Default/fallback time, device-specific times are in deviceSettings
   createTomorrowsNote: boolean;
   unpinOldDailyNotes: boolean;
-}
-
-export interface IDeviceSettings {
-  scheduledTime: string;  // Device-specific scheduled time (HH:mm)
-  lastExecutionDate?: string;  // Last execution date (YYYY-MM-DD) for this device
 }
 
 export interface ISettings {
@@ -35,8 +29,13 @@ export interface ISettings {
   monthly: IPeriodicitySettings;
   quarterly: IPeriodicitySettings;
   yearly: IPeriodicitySettings;
-  deviceSettings: Record<string, IDeviceSettings>;  // Keyed by hostname
 }
+
+// Fields older versions stored in the synced data.json; device-specific values now live in ./device.
+type SavedSettings = Partial<Omit<ISettings, 'daily'>> & {
+  daily?: Partial<IDailySettings> & { scheduledTime?: string };
+  deviceSettings?: unknown;
+};
 
 export const DEFAULT_PERIODICITY_SETTINGS: IPeriodicitySettings = Object.freeze({
   available: false,
@@ -54,7 +53,6 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
     excludeWeekends: false,
     openAtFirstPosition: false,
     enableAdvancedScheduling: false,
-    scheduledTime: "22:00",
     createTomorrowsNote: false,
     unpinOldDailyNotes: false
   },
@@ -62,10 +60,10 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
   quarterly: { ...DEFAULT_PERIODICITY_SETTINGS },
   yearly: { ...DEFAULT_PERIODICITY_SETTINGS },
-  deviceSettings: {},
 });
 
-export function applyDefaultSettings(savedSettings: ISettings): ISettings {
+export function applyDefaultSettings(savedSettings: SavedSettings | null | undefined): ISettings {
+  const { scheduledTime: _legacyScheduledTime, ...savedDaily } = savedSettings?.daily ?? {};
   // Perform deep merge to ensure new fields get default values
   const result: ISettings = {
     alwaysOpen: savedSettings?.alwaysOpen ?? DEFAULT_SETTINGS.alwaysOpen,
@@ -73,7 +71,7 @@ export function applyDefaultSettings(savedSettings: ISettings): ISettings {
     debug: savedSettings?.debug ?? DEFAULT_SETTINGS.debug,
     daily: {
       ...DEFAULT_SETTINGS.daily,
-      ...savedSettings?.daily,
+      ...savedDaily,
     },
     weekly: {
       ...DEFAULT_SETTINGS.weekly,
@@ -91,7 +89,6 @@ export function applyDefaultSettings(savedSettings: ISettings): ISettings {
       ...DEFAULT_SETTINGS.yearly,
       ...savedSettings?.yearly,
     },
-    deviceSettings: savedSettings?.deviceSettings ?? {},
   };
 
   return result;

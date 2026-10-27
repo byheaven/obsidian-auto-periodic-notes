@@ -1,6 +1,7 @@
-import { App, Setting } from 'obsidian';
+import { App, Setting, ToggleComponent } from 'obsidian';
 import AutoTasks from '../..';
 import { DEFAULT_SETTINGS } from '../../settings';
+import { DEFAULT_DEVICE_SETTINGS } from '../../settings/device';
 import AutoPeriodicNotesSettingsTab from '../../settings/tab';
 
 describe('settings tab', () => {
@@ -28,6 +29,8 @@ describe('settings tab', () => {
     } as unknown as App;
     plugin = jest.fn() as unknown as AutoTasks;
     plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
+    plugin.deviceSettings = { ...DEFAULT_DEVICE_SETTINGS };
+    plugin.updateDeviceSettings = jest.fn();
     containerEl = createMockElement() as unknown as HTMLElement;
     containerEl.empty = jest.fn();
 
@@ -57,6 +60,19 @@ describe('settings tab', () => {
     sut.display();
 
     expect(setNameSpy).not.toHaveBeenCalledWith('No periodic notes enabled');
+  });
+
+  it('shows the device creation toggle off by default and saves changes on this device', () => {
+    const setNameSpy = jest.spyOn(Setting.prototype, 'setName');
+    const setValueSpy = jest.spyOn(ToggleComponent.prototype, 'setValue');
+    const onChangeSpy = jest.spyOn(ToggleComponent.prototype, 'onChange');
+
+    sut.display();
+
+    expect(setNameSpy).toHaveBeenCalledWith('Create notes on this device');
+    expect(setValueSpy).toHaveBeenNthCalledWith(1, false);
+    onChangeSpy.mock.calls[0][0](true);
+    expect(plugin.updateDeviceSettings).toHaveBeenCalledWith({ createNotes: true });
   });
 
   it('displays the always open setting', () => {

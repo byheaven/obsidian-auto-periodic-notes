@@ -134,6 +134,9 @@ export default class NotesProvider {
           }
 
           if (!existingNote) {
+            if (!this.mayCreate(term)) {
+              return;
+            }
             // Create the note for target date
             debug(`Creating daily note for ${targetDate.format('YYYY-MM-DD')}`);
             const newNote = await createDailyNote(targetDate);
@@ -186,6 +189,9 @@ export default class NotesProvider {
         } else {
           // Use original path for backward compatibility
           if (!cls.isPresent()) {
+            if (!this.mayCreate(term)) {
+              return;
+            }
             if (dailySettings.excludeWeekends) {
               const today = moment();
               if (today.format('dd') === 'Sa' || today.format('dd') === 'Su') {
@@ -254,6 +260,9 @@ export default class NotesProvider {
           }
 
           if (!existingNote) {
+            if (!this.mayCreate(term)) {
+              return;
+            }
             // Create the note for target date
             debug(`Creating ${term} note for ${targetDate.format('YYYY-MM-DD')}`);
             const newNote = await helpers.create(targetDate);
@@ -286,6 +295,9 @@ export default class NotesProvider {
         } else {
           // Use original path for backward compatibility (no advanced scheduling)
           if (!cls.isPresent()) {
+            if (!this.mayCreate(term)) {
+              return;
+            }
             debug(`Creating new ${term} note`);
             const newNote: TFile = await cls.create();
             new Notice(`${this.getPeriodLabel(term, false)} note has been created.`, 5000);
@@ -306,6 +318,14 @@ export default class NotesProvider {
       }
 
     }
+  }
+
+  private mayCreate(term: string): boolean {
+    if (this.plugin.canCreateNotes()) {
+      return true;
+    }
+    debug(`Not creating ${term} note: note creation is off on this device`);
+    return false;
   }
 
   private getOpenWorkspaceLeaves(): Record<string, WorkspaceLeaf> {
