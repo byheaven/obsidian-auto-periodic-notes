@@ -22,6 +22,7 @@ export default class AutoPeriodicNotes extends Plugin {
     scheduledTime: null
   };
   private lastVisibilityCheckTime: number = 0;
+  private lastLocalDayChecked: string | null = null;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
@@ -383,7 +384,13 @@ export default class AutoPeriodicNotes extends Plugin {
 
     const scheduledTime = this.getScheduledTime();
     if (!scheduledTime) {
-      debug('[Visibility] No switch time, checking today\'s notes');
+      const today = moment().format('YYYY-MM-DD');
+      if (today === this.lastLocalDayChecked) {
+        debug('[Visibility] No switch time and still the same day, skipping');
+        return;
+      }
+      debug('[Visibility] No switch time and a new day, checking today\'s notes');
+      this.lastLocalDayChecked = today;
       await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
       return;
     }
@@ -459,6 +466,7 @@ export default class AutoPeriodicNotes extends Plugin {
       console.log(`[Auto Periodic Notes] Startup after ${scheduledTime}, creating tomorrow's note...`);
       await this.executeCustomScheduledTask(false);
     } else {
+      this.lastLocalDayChecked = moment().format('YYYY-MM-DD');
       // Before scheduled time: run today's startup logic
       debug('[Startup] Before scheduled time, using today startup logic');
       console.log(`[Auto Periodic Notes] Startup before ${scheduledTime}, creating today's note...`);

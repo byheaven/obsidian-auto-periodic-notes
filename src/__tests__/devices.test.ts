@@ -716,6 +716,17 @@ describe('Tab handling across devices', () => {
       expect(tabs()).toEqual([[INBOX, false]]);
     });
 
+    it('leaves notes opened by hand alone on a wake the same day without a switch time', async () => {
+      setTimeZone('Asia/Shanghai');
+      const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-29T10:00:00Z', data: syncedSettings('') });
+      (device.app.workspace as any).getLeaf().openFile({ path: PREVIOUS });
+      await settle();
+
+      await sleepAndWakeAt('2026-10-29T11:00:00Z');
+
+      expect(tabs()).toEqual([[TOMORROW, true], [PREVIOUS, false]]);
+    });
+
     it('moves to the new local day on wake without a switch time', async () => {
       setTimeZone('Asia/Shanghai');
       mockVault.paths.add(day('2026-10-30'));
