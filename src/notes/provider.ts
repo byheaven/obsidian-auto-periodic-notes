@@ -49,6 +49,7 @@ export default class NotesProvider {
   private workspaceLeaves: Record<string, WorkspaceLeaf>;
   private app: App;
   private plugin: AutoPeriodicNotes;
+  private previousRun: Promise<void> = Promise.resolve();
 
   constructor(workspace: ObsidianWorkspace, app: App, plugin: AutoPeriodicNotes, waitTimeout?: number) {
     this.workspace = workspace;
@@ -60,22 +61,28 @@ export default class NotesProvider {
 
   async checkAndCreateNotes(settings: ISettings, context?: CheckContext): Promise<void> {
     debug(`Checking if any new notes need to be created (context: ${context?.scheduleName || 'manual'})`);
-
-    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context);
+    await this.runAfterPreviousRun(() => this.checkAndCreateAllNotes(settings, context, false));
   }
 
   async checkAndCreateNextPeriodNotes(settings: ISettings, context?: CheckContext): Promise<void> {
     debug(`Creating next period notes (context: ${context?.scheduleName || 'manual'})`);
+    await this.runAfterPreviousRun(() => this.checkAndCreateAllNotes(settings, context, true));
+  }
 
-    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context, true);
+  // Startup, wake, the scheduled time and sync arrivals can overlap; each run reads the open tabs once and
+  // pauses after closing tabs, so a run that interleaved with another would open a second tab for the same note.
+  private runAfterPreviousRun(run: () => Promise<void>): Promise<void> {
+    const result = this.previousRun.then(run);
+    this.previousRun = result.catch(() => undefined);
+    return result;
+  }
+
+  private async checkAndCreateAllNotes(settings: ISettings, context: CheckContext | undefined, nextPeriod: boolean): Promise<void> {
+    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
   }
 
   private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean, context?: CheckContext, nextPeriod: boolean = false): Promise<void> {

@@ -72,7 +72,9 @@ class FakeLeaf {
     this.pinned = pinned;
   }
 
+  // Like Obsidian, the leaf shows the file only once loading it has finished
   async openFile(file: { path: string }) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
     this.file = file.path;
   }
 
@@ -239,16 +241,29 @@ describe('Tab handling across devices', () => {
   });
 
   it('runs the scheduled task once per day on a device that does not create notes', async () => {
-    const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[TODAY, true]] });
+    const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[TODAY, true]] });
     await advanceTo('2026-10-28T22:30:30');
-    const leafWithTomorrow = () => tabs().filter(([file]) => file === TOMORROW);
-    expect(leafWithTomorrow()).toEqual([[TOMORROW, true]]);
+    expect(tabs()).toEqual([[TOMORROW, true], [TODAY, false]]);
 
+    // The user pins today's note again to finish it tonight
+    (device.app.workspace as any).iterateAllLeaves((leaf: FakeLeaf) => leaf.file === TODAY && leaf.setPinned(true));
     await sleepAndWakeAt('2026-10-28T23:10:00');
     await jest.runOnlyPendingTimersAsync();
 
-    expect(leafWithTomorrow()).toEqual([[TOMORROW, true]]);
-    expect(tabs()).toEqual([[TOMORROW, true], [TODAY, false]]);
+    expect(tabs()).toEqual([[TOMORROW, true], [TODAY, true]]);
+  });
+
+  it('opens the daily note once when it arrives while a wake run is in progress', async () => {
+    mockVault.paths.delete(TODAY);
+    const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[PREVIOUS, true], [INBOX, false]] });
+
+    mockVault.add(TODAY);
+    await jest.advanceTimersByTimeAsync(300);
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    await settle();
+
+    expect(tabs()).toEqual(startupState);
   });
 
   describe('when the note arrives by sync after the trigger ran', () => {
@@ -276,18 +291,20 @@ describe('Tab handling across devices', () => {
     });
 
     it('ignores files that are not the note the current trigger targets', async () => {
-      mockVault.paths.delete(TOMORROW);
-      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[TODAY, true], [INBOX, false]] });
-      await advanceTo('2026-10-28T22:30:30');
+      const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[TODAY, true], [INBOX, false]] });
+      // The user reopens yesterday's note; another startup run would close it
+      (device.app.workspace as any).getLeaf().openFile({ path: PREVIOUS });
+      await settle();
       const before = tabs();
+      expect(before).toEqual([[TODAY, true], [INBOX, false], [PREVIOUS, false]]);
 
-      for (const path of [TODAY, PREVIOUS, day('2026-10-30'), 'Inbox2.md', 'notes/2026-10-29.md']) {
+      for (const path of [TOMORROW, PREVIOUS, day('2026-10-30'), 'Inbox2.md', 'notes/2026-10-28.md']) {
         await arrive(path);
         expect(tabs()).toEqual(before);
       }
 
-      await arrive(TOMORROW);
-      expect(tabs()).toEqual(scheduledState);
+      await arrive(TODAY);
+      expect(tabs()).toEqual(startupState);
     });
 
     it('opens a note the creating device created itself only once', async () => {

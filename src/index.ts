@@ -68,16 +68,15 @@ export default class AutoPeriodicNotes extends Plugin {
     this.setupVisibilityListener();
 
     // Registered after layout ready because Obsidian fires 'create' for every file while loading the vault
-    this.registerEvent(this.app.vault.on('create', (file) => this.handleNoteFromAnotherDevice(file)));
+    this.registerEvent(this.app.vault.on('create', (file) => this.handleCreatedFile(file)));
   }
 
-  // Obsidian also fires 'create' for notes this device writes, so only a device that does not create notes
-  // reacts here: the note it is waiting for comes from the creating device through sync.
-  private handleNoteFromAnotherDevice(file: TAbstractFile): void {
-    if (this.canCreateNotes() || file.path !== this.currentDailyNotePath()) {
+  // A device that does not create notes waits for the note to arrive from the creating device through sync
+  private handleCreatedFile(file: TAbstractFile): void {
+    if (file.path !== this.currentDailyNotePath()) {
       return;
     }
-    debug(`[Arrival] Current daily note ${file.path} arrived, handling its tabs`);
+    debug(`[Arrival] Current daily note ${file.path} appeared, handling its tabs`);
     this.runStartupLogic();
   }
 
