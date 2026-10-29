@@ -1,8 +1,11 @@
-import { App, Setting, ToggleComponent } from 'obsidian';
+/** @jest-environment ./src/test-environments/time-zone-environment.js */
+import { App, Setting, TextComponent, ToggleComponent } from 'obsidian';
 import AutoTasks from '../..';
 import { DEFAULT_SETTINGS } from '../../settings';
 import { DEFAULT_DEVICE_SETTINGS } from '../../settings/device';
 import AutoPeriodicNotesSettingsTab from '../../settings/tab';
+
+declare const setTimeZone: (zone: string) => void;
 
 describe('settings tab', () => {
 
@@ -129,4 +132,32 @@ describe('settings tab', () => {
     expect(setNameSpy).toHaveBeenCalledWith('Close older yearly notes');
   });
 
+
+  it('updates the local time hint when the scheduled time is edited', async () => {
+    setTimeZone('America/Los_Angeles');
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-29T03:00:00Z'));
+    try {
+      plugin.settings = {
+        ...DEFAULT_SETTINGS,
+        daily: { ...DEFAULT_SETTINGS.daily, available: true, enableAdvancedScheduling: true, scheduledTime: '14:00' },
+      };
+      plugin.updateSettings = jest.fn();
+      const setDescSpy = jest.spyOn(Setting.prototype, 'setDesc');
+      let editTime: (value: string) => Promise<void> = async () => {};
+      jest.spyOn(TextComponent.prototype, 'onChange').mockImplementation(function (this: TextComponent, cb) {
+        editTime = cb;
+        return this;
+      });
+
+      sut.display();
+      expect(setDescSpy).toHaveBeenCalledWith(expect.stringContaining('14:00 UTC = 07:00 on this device (America/Los_Angeles)'));
+
+      await editTime('15:30');
+
+      expect(setDescSpy).toHaveBeenLastCalledWith(expect.stringContaining('15:30 UTC = 08:30 on this device (America/Los_Angeles)'));
+      expect(plugin.settings.daily.scheduledTime).toBe('15:30');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

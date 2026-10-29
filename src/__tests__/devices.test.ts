@@ -1,9 +1,12 @@
+/** @jest-environment ./src/test-environments/time-zone-environment.js */
 import { readFileSync } from 'fs';
 import { EventRef, PluginManifest, PluginSettingTab, TAbstractFile } from 'obsidian';
 import { DailyNote } from 'obsidian-periodic-notes-provider';
 import AutoPeriodicNotes from '../';
 import { DEFAULT_SETTINGS } from '../settings';
 import type { ObsidianApp } from '../types';
+
+declare const setTimeZone: (zone: string) => void;
 
 // One synced vault shared by the devices under test; Obsidian fires 'create' for every new file, including
 // files the plugin itself creates.
@@ -26,13 +29,24 @@ const mockVault = {
 };
 
 jest.mock('obsidian-periodic-notes-provider');
-jest.mock('obsidian-daily-notes-interface', () => ({
-  DEFAULT_DAILY_NOTE_FORMAT: 'YYYY-MM-DD',
-  getDailyNoteSettings: () => ({ folder: 'journals', format: 'YYYY-MM-DD', template: '' }),
-  getAllDailyNotes: () => ({}),
-  getDailyNote: (date: { format(format: string): string }) => mockVault.get(`journals/${date.format('YYYY-MM-DD')}.md`),
-  createDailyNote: async (date: { format(format: string): string }) => mockVault.create(`journals/${date.format('YYYY-MM-DD')}.md`),
-}));
+// Like the real library, notes are found by the start of their day in local time, wherever they are filed.
+jest.mock('obsidian-daily-notes-interface', () => {
+  const moment = jest.requireActual('moment');
+  const dayKey = (date: moment.Moment) => date.clone().startOf('day').format();
+  return {
+    DEFAULT_DAILY_NOTE_FORMAT: 'YYYY-MM-DD',
+    getDailyNoteSettings: () => ({ folder: 'journals', format: 'YYYY-MM-DD', template: '' }),
+    getAllDailyNotes: () => ({}),
+    getDailyNote: (date: moment.Moment) => {
+      const path = [...mockVault.paths].find((candidate) => {
+        const match = candidate.match(/^journals\/(?:.*\/)?(\d{4}-\d{2}-\d{2})\.md$/);
+        return match && dayKey(moment(match[1], 'YYYY-MM-DD', true)) === dayKey(date);
+      });
+      return path ? { path } : null;
+    },
+    createDailyNote: async (date: moment.Moment) => mockVault.create(`journals/${date.format('YYYY-MM-DD')}.md`),
+  };
+});
 
 const day = (date: string) => `journals/${date}.md`;
 const PREVIOUS = day('2026-10-27');
@@ -226,10 +240,10 @@ describe('Tab handling across devices', () => {
 
   // Every trigger must leave a device that does not create notes with the same tabs as the creating device.
   describe.each([
-    ['startup before the scheduled time', '2026-10-28T08:00:00', nothing, startupState],
-    ['startup after the scheduled time', '2026-10-28T23:00:00', nothing, lateStartupState],
-    ['the scheduled time', '2026-10-28T08:00:00', () => advanceTo('2026-10-28T22:30:30'), scheduledState],
-    ['wake after the scheduled time', '2026-10-28T08:00:00', () => sleepAndWakeAt('2026-10-28T23:10:00'), scheduledState],
+    ['startup before the scheduled time', '2026-10-28T08:00:00Z', nothing, startupState],
+    ['startup after the scheduled time', '2026-10-28T23:00:00Z', nothing, lateStartupState],
+    ['the scheduled time', '2026-10-28T08:00:00Z', () => advanceTo('2026-10-28T22:30:30Z'), scheduledState],
+    ['wake after the scheduled time', '2026-10-28T08:00:00Z', () => sleepAndWakeAt('2026-10-28T23:10:00Z'), scheduledState],
   ])('at %s', (_trigger, startAt, trigger, expected) => {
     it.each([true, false])('handles tabs the same way when createNotes=%s, creating nothing', async (createNotes) => {
       const { tabs } = await startDevice({ createNotes, at: startAt, tabs: restoredTabs });
@@ -241,20 +255,20 @@ describe('Tab handling across devices', () => {
   });
 
   it('runs the scheduled task once per day on a device that does not create notes', async () => {
-    const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[TODAY, true]] });
-    await advanceTo('2026-10-28T22:30:30');
+    const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00Z', tabs: [[TODAY, true]] });
+    await advanceTo('2026-10-28T22:30:30Z');
     expect(tabs()).toEqual([[TOMORROW, true], [TODAY, false]]);
 
     // The user pins today's note again to finish it tonight
     (device.app.workspace as any).iterateAllLeaves((leaf: FakeLeaf) => leaf.file === TODAY && leaf.setPinned(true));
-    await sleepAndWakeAt('2026-10-28T23:10:00');
+    await sleepAndWakeAt('2026-10-28T23:10:00Z');
     await jest.runOnlyPendingTimersAsync();
 
     expect(tabs()).toEqual([[TOMORROW, true], [TODAY, true]]);
   });
 
   it.each([true, false])('keeps a daily note the user creates and opens by hand in one tab (createNotes=%s)', async (createNotes) => {
-    const { device, tabs } = await startDevice({ createNotes, at: '2026-10-28T08:00:00', tabs: [[TODAY, true], [INBOX, false]] });
+    const { device, tabs } = await startDevice({ createNotes, at: '2026-10-28T08:00:00Z', tabs: [[TODAY, true], [INBOX, false]] });
     // The user deletes today's note, which closes its tab
     mockVault.paths.delete(TODAY);
     let activeLeaf: FakeLeaf | undefined;
@@ -275,7 +289,7 @@ describe('Tab handling across devices', () => {
 
   it('opens the daily note once when it arrives while a wake run is in progress', async () => {
     mockVault.paths.delete(TODAY);
-    const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[PREVIOUS, true], [INBOX, false]] });
+    const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00Z', tabs: [[PREVIOUS, true], [INBOX, false]] });
 
     mockVault.add(TODAY);
     await jest.advanceTimersByTimeAsync(300);
@@ -289,8 +303,8 @@ describe('Tab handling across devices', () => {
   describe('when the note arrives by sync after the trigger ran', () => {
     it('handles the scheduled note as the scheduled time would have', async () => {
       mockVault.paths.delete(TOMORROW);
-      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: restoredTabs });
-      await advanceTo('2026-10-28T22:30:30');
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00Z', tabs: restoredTabs });
+      await advanceTo('2026-10-28T22:30:30Z');
       expect(tabs()).toEqual(startupState);
 
       await arrive(TOMORROW);
@@ -301,7 +315,7 @@ describe('Tab handling across devices', () => {
 
     it("handles today's note as startup would have, closing older daily notes", async () => {
       mockVault.paths.delete(TODAY);
-      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[PREVIOUS, true], [INBOX, false]] });
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00Z', tabs: [[PREVIOUS, true], [INBOX, false]] });
       expect(tabs()).toEqual([[PREVIOUS, true], [INBOX, false]]);
 
       await arrive(TODAY);
@@ -311,7 +325,7 @@ describe('Tab handling across devices', () => {
     });
 
     it('ignores files that are not the note the current trigger targets', async () => {
-      const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[TODAY, true], [INBOX, false]] });
+      const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00Z', tabs: [[TODAY, true], [INBOX, false]] });
       // The user reopens yesterday's note; another startup run would close it
       (device.app.workspace as any).getLeaf().openFile({ path: PREVIOUS });
       await settle();
@@ -329,8 +343,8 @@ describe('Tab handling across devices', () => {
 
     it('opens a note the creating device created itself only once', async () => {
       mockVault.paths.delete(TOMORROW);
-      const { tabs } = await startDevice({ createNotes: true, at: '2026-10-28T08:00:00', tabs: [[TODAY, true]] });
-      await advanceTo('2026-10-28T22:30:30');
+      const { tabs } = await startDevice({ createNotes: true, at: '2026-10-28T08:00:00Z', tabs: [[TODAY, true]] });
+      await advanceTo('2026-10-28T22:30:30Z');
 
       expect(mockVault.created).toEqual([TOMORROW]);
       expect(tabs()).toEqual([[TOMORROW, true], [TODAY, false]]);
@@ -341,12 +355,12 @@ describe('Tab handling across devices', () => {
     mockVault.paths = new Set([INBOX]);
     const { tabs } = await startDevice({
       createNotes: false,
-      at: '2026-10-28T08:00:00',
+      at: '2026-10-28T08:00:00Z',
       tabs: [[INBOX, false]],
       data: { ...syncedSettings(), createNotes: true },
     });
-    await advanceTo('2026-10-28T22:30:30');
-    await sleepAndWakeAt('2026-10-28T23:10:00');
+    await advanceTo('2026-10-28T22:30:30Z');
+    await sleepAndWakeAt('2026-10-28T23:10:00Z');
 
     expect(mockVault.created).toEqual([]);
     expect(tabs()).toEqual([[INBOX, false]]);
@@ -359,32 +373,152 @@ describe('Tab handling across devices', () => {
     it('uses the synced time over a time left in local storage by 0.6.0', async () => {
       const { tabs } = await startDevice({
         createNotes: false,
-        at: '2026-10-28T08:00:00',
+        at: '2026-10-28T08:00:00Z',
         tabs: [[TODAY, true]],
         localRecord: { createNotes: false, scheduledTime: '21:00', lastExecutionDate: null },
       });
-      await advanceTo('2026-10-28T21:00:30');
+      await advanceTo('2026-10-28T21:00:30Z');
       expect(tabs()).toEqual([[TODAY, true]]);
 
-      await advanceTo('2026-10-28T22:30:30');
+      await advanceTo('2026-10-28T22:30:30Z');
       expect(tabs()).toEqual([[TOMORROW, true], [TODAY, false]]);
     });
 
     it('follows a time changed on another device without restarting', async () => {
-      const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[TODAY, true]] });
+      const { device, tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00Z', tabs: [[TODAY, true]] });
       const onload = jest.spyOn(device, 'onload');
-      await advanceTo('2026-10-28T20:00:00');
+      await advanceTo('2026-10-28T20:00:00Z');
       const timers = jest.getTimerCount();
 
       device.savedData = syncedSettings('23:15');
       await device.onExternalSettingsChange();
       expect(jest.getTimerCount()).toBe(timers);
 
-      await advanceTo('2026-10-28T22:30:30');
+      await advanceTo('2026-10-28T22:30:30Z');
       expect(tabs()).toEqual([[TODAY, true]]);
-      await advanceTo('2026-10-28T23:15:30');
+      await advanceTo('2026-10-28T23:15:30Z');
       expect(tabs()).toEqual([[TOMORROW, true], [TODAY, false]]);
       expect(onload).not.toHaveBeenCalled();
     });
+  });
+
+  // The scheduled time is a UTC time and days follow UTC, so devices in different time zones pin the same note.
+  // With 14:00 UTC (22:00 in Shanghai) that note is always the Shanghai date two hours ahead of the instant.
+  describe.each([
+    ['Asia/Shanghai', 22],
+    ['America/Los_Angeles', 7],
+  ])('on a device in %s', (zone, localHourAt14Utc) => {
+    const pinnedDailyNotes = (tabs: (string | boolean | null)[][]) => tabs.filter(([, pinned]) => pinned).map(([file]) => file);
+    const noRunYet = (createNotes: boolean) => ({ createNotes, lastExecutionDate: '2026-10-01' });
+    const elapseTo = (at: string) => jest.advanceTimersByTimeAsync(new Date(at).getTime() - Date.now());
+
+    beforeEach(() => {
+      setTimeZone(zone);
+      expect(new Date('2026-10-29T14:00:00Z').getHours()).toBe(localHourAt14Utc);
+      mockVault.paths = new Set(['26', '27', '28', '29', '30', '31'].map((d) => day(`2026-10-${d}`))
+        .concat(['01', '02', '03'].map((d) => day(`2026-11-${d}`))));
+    });
+
+    it.each([
+      ['2026-10-29T03:00:00Z', '2026-10-29'],
+      ['2026-10-29T06:00:00Z', '2026-10-29'],
+      ['2026-10-29T07:00:00Z', '2026-10-29'],
+      ['2026-10-29T13:59:58Z', '2026-10-29'],
+      ['2026-10-29T14:00:00Z', '2026-10-30'],
+      ['2026-10-29T15:59:58Z', '2026-10-30'],
+      ['2026-10-29T16:00:00Z', '2026-10-30'],
+      ['2026-10-29T23:59:58Z', '2026-10-30'],
+      ['2026-10-30T00:00:00Z', '2026-10-30'],
+      ['2026-10-30T07:00:00Z', '2026-10-30'],
+      ['2026-11-01T09:00:00Z', '2026-11-01'],
+      ['2026-11-01T14:00:00Z', '2026-11-02'],
+      ['2026-11-01T16:00:00Z', '2026-11-02'],
+    ])('pins the note of the Shanghai date two hours ahead at startup at %s', async (at, date) => {
+      const { tabs } = await startDevice({ createNotes: false, at, data: syncedSettings('14:00'), localRecord: noRunYet(false) });
+
+      expect(pinnedDailyNotes(tabs())).toEqual([day(date)]);
+      expect(mockVault.created).toEqual([]);
+    });
+
+    it('runs at the same UTC instant every day, across a daylight saving change', async () => {
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-31T13:00:00Z', data: syncedSettings('14:00'), localRecord: noRunYet(false) });
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-31')]);
+
+      await elapseTo('2026-10-31T13:59:59Z');
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-31')]);
+      await elapseTo('2026-10-31T14:00:00Z');
+      await settle();
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-11-01')]);
+
+      await elapseTo('2026-11-01T13:59:59Z');
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-11-01')]);
+      await elapseTo('2026-11-01T14:00:00Z');
+      await settle();
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-11-02')]);
+    });
+
+    it('names the note it creates by the UTC date', async () => {
+      mockVault.paths.delete(day('2026-10-29'));
+      mockVault.paths.delete(day('2026-10-30'));
+      const { tabs } = await startDevice({
+        createNotes: true,
+        at: '2026-10-29T15:00:00Z',
+        tabs: [[day('2026-10-28'), true]],
+        data: syncedSettings('14:00'),
+        localRecord: noRunYet(true),
+      });
+
+      expect(mockVault.created).toEqual([day('2026-10-30')]);
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-30')]);
+    });
+
+    it('runs once per UTC day, not again after local midnight', async () => {
+      mockVault.paths.delete(day('2026-10-31'));
+      const { device, tabs } = await startDevice({ createNotes: true, at: '2026-10-29T13:00:00Z', data: syncedSettings('14:00'), localRecord: noRunYet(true) });
+      await elapseTo('2026-10-29T14:00:00Z');
+      await settle();
+      (device.app.workspace as any).iterateAllLeaves((leaf: FakeLeaf) => leaf.file === day('2026-10-29') && leaf.setPinned(true));
+
+      await sleepAndWakeAt('2026-10-29T17:00:00Z');
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-30'), day('2026-10-29')]);
+
+      await sleepAndWakeAt('2026-10-30T14:30:00Z');
+      expect(mockVault.created).toEqual([day('2026-10-31')]);
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-31')]);
+    });
+
+    it('uses UTC days with the advanced daily options off', async () => {
+      const data = syncedSettings('14:00') as { daily: Record<string, unknown> };
+      data.daily = { ...data.daily, createTomorrowsNote: false, unpinOldDailyNotes: false };
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-29T03:00:00Z', tabs: [[day('2026-10-28'), true]], data, localRecord: noRunYet(false) });
+
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-29')]);
+    });
+
+    it('finds a note filed outside the default path instead of creating another', async () => {
+      mockVault.paths.delete(day('2026-10-30'));
+      mockVault.paths.add('journals/2026/2026-10-30.md');
+      const { tabs } = await startDevice({ createNotes: true, at: '2026-10-29T15:00:00Z', data: syncedSettings('14:00'), localRecord: noRunYet(true) });
+
+      expect(mockVault.created).toEqual([]);
+      expect(pinnedDailyNotes(tabs())).toEqual(['journals/2026/2026-10-30.md']);
+    });
+
+    it('applies any UTC time, not only the Shanghai evening', async () => {
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-29T17:00:00Z', data: syncedSettings('20:00'), localRecord: noRunYet(false) });
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-29')]);
+
+      await elapseTo('2026-10-29T20:00:00Z');
+      await settle();
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-30')]);
+    });
+  });
+
+  it('keeps the local date when no scheduled time is set', async () => {
+    setTimeZone('Asia/Shanghai');
+    mockVault.paths = new Set([day('2026-10-29'), day('2026-10-30')]);
+    const { tabs } = await startDevice({ createNotes: false, at: '2026-10-29T17:00:00Z', data: syncedSettings('') });
+
+    expect(tabs()).toEqual([[day('2026-10-30'), true]]);
   });
 });

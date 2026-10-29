@@ -18,7 +18,7 @@ export interface IDailySettings extends IPeriodicitySettings {
   enableAdvancedScheduling: boolean;
   createTomorrowsNote: boolean;
   unpinOldDailyNotes: boolean;
-  scheduledTime: string;  // HH:mm, empty when no scheduled run
+  scheduledTime: string;  // HH:mm in UTC, empty when no scheduled run
 }
 
 export interface ISettings {
@@ -33,6 +33,23 @@ export interface ISettings {
 }
 
 export const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+// The UTC scheduled time as this device's clock will show it at the next run, which differs from today's
+// local time on a daylight saving change.
+export function describeScheduledTime(scheduledTime: string, now: Date = new Date()): string {
+  const match = scheduledTime.match(TIME_REGEX);
+  if (!match) {
+    return '';
+  }
+  const nextRun = new Date(now);
+  nextRun.setUTCHours(parseInt(match[1], 10), parseInt(match[2], 10), 0, 0);
+  if (nextRun <= now) {
+    nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+  }
+  const localTime = `${String(nextRun.getHours()).padStart(2, '0')}:${String(nextRun.getMinutes()).padStart(2, '0')}`;
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return `${scheduledTime} UTC = ${localTime} on this device (${zone})`;
+}
 
 // deviceSettings is a field older versions stored in the synced data.json; device-specific values now live in ./device.
 type SavedSettings = Partial<Omit<ISettings, 'daily'>> & {

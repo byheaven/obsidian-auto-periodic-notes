@@ -1,4 +1,5 @@
 import { moment, Notice, Plugin, type PluginManifest, type TAbstractFile, Workspace, WorkspaceLeaf } from 'obsidian';
+import type { Moment } from 'moment';
 import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
 import { around } from 'monkey-around';
 import { SETTINGS_UPDATED } from './events';
@@ -81,7 +82,7 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private currentDailyNotePath(): string {
-    const now = moment();
+    const now = this.dayClock();
     const target = this.isAfterScheduledTime(now.toDate())
       ? getNextDailyDate(now, this.settings.daily.excludeWeekends)
       : now;
@@ -234,6 +235,16 @@ export default class AutoPeriodicNotes extends Plugin {
     return this.settings.daily.enableAdvancedScheduling ? this.settings.daily.scheduledTime : '';
   }
 
+  // With a scheduled time set, days run on UTC so every device agrees on the current daily note
+  // whatever its own time zone; the scheduled time itself is a UTC time of day.
+  public usesUtcDays(): boolean {
+    return this.getScheduledTime() !== '';
+  }
+
+  public dayClock(): Moment {
+    return this.usesUtcDays() ? moment.utc() : moment();
+  }
+
   private isAfterScheduledTime(now: Date): boolean {
     const scheduledTime = this.getScheduledTime();
     if (!scheduledTime) {
@@ -241,7 +252,7 @@ export default class AutoPeriodicNotes extends Plugin {
     }
     const [hours, minutes] = this.parseScheduledTime(scheduledTime);
     const todayTarget = new Date(now);
-    todayTarget.setHours(hours, minutes, 0, 0);
+    todayTarget.setUTCHours(hours, minutes, 0, 0);
     return now.getTime() >= todayTarget.getTime();
   }
 
@@ -293,10 +304,10 @@ export default class AutoPeriodicNotes extends Plugin {
     const now = new Date();
     const nextRun = new Date(now);
     const [hours, minutes] = this.parseScheduledTime(scheduledTime);
-    nextRun.setHours(hours, minutes, 0, 0);
+    nextRun.setUTCHours(hours, minutes, 0, 0);
 
     if (nextRun <= now) {
-      nextRun.setDate(nextRun.getDate() + 1);
+      nextRun.setUTCDate(nextRun.getUTCDate() + 1);
     }
 
     const delay = nextRun.getTime() - now.getTime();

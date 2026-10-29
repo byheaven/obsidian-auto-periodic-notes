@@ -28,7 +28,7 @@ Automatic creation can be toggled on and off for each of the supported note type
 
 Notes are created only on devices where **Create notes on this device** is turned on. It is off by default, so a vault synced across several devices (for example with Obsidian Sync) gets each note from a single device instead of duplicate or conflicting copies. Devices with it off still open, pin, close, and unpin notes at startup, on wake, and at the custom scheduled time, but only for notes that already exist; when the daily note they are waiting for arrives later by sync, they handle it as soon as it appears.
 
-This switch and the record of the last scheduled run are stored in the device's local storage and are never synced. The custom scheduled time is synced, so every device acts at the same local time. Turn the switch on only on the one device that should create notes.
+This switch and the record of the last scheduled run are stored in the device's local storage and are never synced. The custom scheduled time is synced and is a UTC time, so every device acts at the same instant whatever its time zone; while it is set, the date of the daily note follows UTC as well, so devices in different time zones always pin the same note. The settings tab shows what the UTC time is on each device's clock. For example, 14:00 UTC is 22:00 in Shanghai: before then the note is today's (in Shanghai), and from then on it is tomorrow's. Turn the switch on only on the one device that should create notes.
 
 ## Development
 
