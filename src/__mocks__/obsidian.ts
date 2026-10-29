@@ -41,6 +41,11 @@ class BaseComponent {
   }
 }
 export class ToggleComponent extends BaseComponent {}
+export class TextComponent extends BaseComponent {
+  setPlaceholder(s: string) {
+    return this;
+  }
+}
 
 export class Setting {
   constructor(el: HTMLElement) {
@@ -61,6 +66,11 @@ export class Setting {
 
   addToggle(cb: (toggle: ToggleComponent) => any) {
     cb(new ToggleComponent);
+    return this;
+  }
+
+  addText(cb: (text: TextComponent) => any) {
+    cb(new TextComponent);
     return this;
   }
 }

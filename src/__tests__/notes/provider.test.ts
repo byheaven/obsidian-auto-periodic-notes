@@ -1,4 +1,4 @@
-import { App, MarkdownView, Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
+import { App, MarkdownView, moment, Notice, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
 import { DailyNote, MonthlyNote, QuarterlyNote, WeeklyNote, YearlyNote } from 'obsidian-periodic-notes-provider';
 import NotesProvider from '../../notes/provider';
 import type { ISettings } from '../../settings';
@@ -155,7 +155,7 @@ describe('Notes Provider', () => {
         getAbstractFileByPath: jest.fn().mockReturnValue(null),
       },
     } as any;
-    mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
+    mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true), dayClock: () => moment() } as any;
     sut = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
   });
 
@@ -254,7 +254,7 @@ describe('Notes Provider', () => {
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-19T12:00:00Z').getTime());
 
     const mockApp = { workspace: new Workspace() } as any;
-    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true), dayClock: () => moment() } as any;
     const sut = new NotesProvider(new Workspace(), mockApp, mockPlugin);
     await sut.checkAndCreateNotes(settings);
 
@@ -323,7 +323,7 @@ describe('Notes Provider', () => {
       read: jest.fn().mockResolvedValue('file content'),
     };
 
-    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true), dayClock: () => moment() } as any;
     const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithTemplater.checkAndCreateNotes(settings);
@@ -375,7 +375,7 @@ describe('Notes Provider', () => {
       read: jest.fn().mockResolvedValue('file content'),
     };
 
-    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true), dayClock: () => moment() } as any;
     const sutWithTemplater = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithTemplater.checkAndCreateNotes(settings);
@@ -715,7 +715,7 @@ describe('Notes Provider', () => {
     const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
     mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
 
-    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
+    const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true), dayClock: () => moment() } as any;
     const sutWithVault = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
     await sutWithVault.checkAndCreateNotes(settings, { scheduleName: 'scheduledTime' });
@@ -874,7 +874,7 @@ describe('Notes Provider', () => {
       const mockGetLeaf = Workspace.prototype.getLeaf as jest.MockedFunction<typeof Workspace.prototype.getLeaf>;
       mockGetLeaf.mockImplementation(() => new WorkspaceLeaf());
 
-      const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true) } as any;
+      const mockPlugin = { setDailyNoteCreation: jest.fn(), canCreateNotes: jest.fn().mockReturnValue(true), dayClock: () => moment() } as any;
       const sutWithVault = new NotesProvider(new Workspace(), mockApp, mockPlugin, TEST_WAIT_TIMEOUT);
 
       await sutWithVault.checkAndCreateNextPeriodNotes(settings, { scheduleName: 'scheduledTime' });

@@ -103,7 +103,7 @@ export default class NotesProvider {
 
         if (useAdvancedPath) {
           // Use obsidian-daily-notes-interface for date-specific operations
-          let targetDate = moment();
+          let targetDate = this.plugin.dayClock();
 
           // Apply next period offset if requested
           if (nextPeriod) {
@@ -148,8 +148,7 @@ export default class NotesProvider {
 
             // Determine if this is a future-dated note (tomorrow or later)
             // Check if targetDate is after today at the day level
-            const today = moment();
-            const isFutureNote = targetDate.isAfter(today, 'day');
+            const isFutureNote = targetDate.isAfter(this.plugin.dayClock(), 'day');
 
             new Notice(
               isFutureNote
@@ -236,7 +235,7 @@ export default class NotesProvider {
 
         if (useAdvancedPath) {
           // Use obsidian-daily-notes-interface for date-specific operations
-          let targetDate = moment();
+          let targetDate = this.plugin.dayClock();
 
           // Apply next period offset if requested
           if (nextPeriod) {

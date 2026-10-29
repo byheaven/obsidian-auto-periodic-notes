@@ -228,7 +228,7 @@ describe('Daily Note Scheduling', () => {
     });
 
     it('runs the scheduled task on a creating device and records the run only in local storage', async () => {
-      jest.setSystemTime(new Date('2025-11-29T21:59:00'));
+      jest.setSystemTime(new Date('2025-11-29T21:59:00Z'));
       const advancedData = {
         ...DEFAULT_SETTINGS,
         daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true, scheduledTime: '22:00' },
