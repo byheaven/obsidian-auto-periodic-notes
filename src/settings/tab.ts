@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import { getNextDailyDate } from '../notes/provider';
-import { IPeriodicity, ISettings, nextSwitchOnThisDevice, TIME_REGEX } from '.';
+import { IPeriodicity, ISettings, nextSwitchOnThisDevice, switchFromNote, TIME_REGEX } from '.';
 import AutoPeriodicNotes from '..';
 
 // Indents a setting that only applies under the one above it (styles.css)
@@ -92,8 +92,9 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
     const status = new Setting(this.containerEl);
     const showStatus = () => {
       const current = this.plugin.currentDailyDate();
-      const next = nextSwitchOnThisDevice(settings.daily.scheduledTime);
-      status.setName(`Current daily note: ${current.format('YYYY-MM-DD')}`);
+      const currentDate = current.format('YYYY-MM-DD');
+      const next = switchFromNote(currentDate, settings.daily.scheduledTime);
+      status.setName(`Current daily note: ${currentDate}`);
       status.setDesc(next
         ? `Switches to ${getNextDailyDate(current, settings.daily.excludeWeekends).format('YYYY-MM-DD')} at ${next.localTime} on this device.`
         : 'No switch time set.');

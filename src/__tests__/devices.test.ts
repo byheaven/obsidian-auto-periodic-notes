@@ -599,6 +599,29 @@ describe('Tab handling across devices', () => {
       expect(status().desc).toBe('Switches to 2026-11-03 at 22:00 on this device.');
     });
 
+    it('names the switch that leaves Monday\'s note, at its local time after a daylight saving change', async () => {
+      const data = syncedSettings('14:00') as { daily: Record<string, unknown> };
+      data.daily = { ...data.daily, excludeWeekends: true };
+      const device = await deviceAt('America/Los_Angeles', '2026-10-30T15:00:00Z', false, data);
+
+      openTab(device);
+
+      expect(status().name).toBe('Current daily note: 2026-11-02');
+      expect(status().desc).toBe('Switches to 2026-11-03 at 06:00 on this device.');
+    });
+
+    it('still tells devices on 0.6.x whether the switch is on', async () => {
+      const device = await deviceAt('Asia/Shanghai', '2026-10-29T10:00:00Z', true);
+      openTab(device);
+      const saved = () => (device.saveData as jest.Mock).mock.calls.at(-1)[0];
+
+      await find('Switch time (UTC)').texts[0].changeHandler('');
+      expect(saved().daily).toMatchObject({ scheduledTime: '', enableAdvancedScheduling: false });
+
+      await find('Switch time (UTC)').texts[0].changeHandler('14:00');
+      expect(saved().daily).toMatchObject({ scheduledTime: '14:00', enableAdvancedScheduling: true });
+    });
+
     it('follows this device\'s date without a switch time', async () => {
       const device = await deviceAt('America/Los_Angeles', '2026-10-29T02:00:00Z', false, syncedSettings(''));
 
@@ -669,6 +692,39 @@ describe('Tab handling across devices', () => {
       const before = JSON.parse(JSON.stringify(device.settings));
       await find('Pin the weekly note').toggles[0].changeHandler(true);
       expect(device.settings).toEqual({ ...before, weekly: { ...before.weekly, openAndPin: true } });
+    });
+  });
+
+  describe('older notes and waking', () => {
+    it('closes older daily notes at the switch when only-unpin is off', async () => {
+      const data = syncedSettings() as { daily: Record<string, unknown> };
+      data.daily = { ...data.daily, unpinOldDailyNotes: false };
+
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T23:00:00Z', tabs: [[TODAY, true], [INBOX, false]], data });
+
+      expect(tabs()).toEqual([[TOMORROW, true], [INBOX, false]]);
+    });
+
+    it('closes older daily notes at startup when the daily note is not pinned', async () => {
+      const data = syncedSettings('') as { daily: Record<string, unknown> };
+      data.daily = { ...data.daily, openAndPin: false, unpinOldDailyNotes: false };
+      (DailyNote.prototype.isPresent as jest.Mock).mockReturnValueOnce(true);
+      (DailyNote.prototype.getCurrent as jest.Mock).mockReturnValueOnce({ path: TODAY });
+
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00Z', tabs: [[PREVIOUS, true], [INBOX, false]], data });
+
+      expect(tabs()).toEqual([[INBOX, false]]);
+    });
+
+    it('moves to the new local day on wake without a switch time', async () => {
+      setTimeZone('Asia/Shanghai');
+      mockVault.paths.add(day('2026-10-30'));
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-29T10:00:00Z', data: syncedSettings('') });
+      expect(tabs()).toEqual([[TOMORROW, true]]);
+
+      await sleepAndWakeAt('2026-10-29T17:00:00Z');
+
+      expect(tabs()).toEqual([[day('2026-10-30'), true]]);
     });
   });
 });

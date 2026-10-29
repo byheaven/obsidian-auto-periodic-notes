@@ -5,7 +5,7 @@ import { around } from 'monkey-around';
 import { SETTINGS_UPDATED } from './events';
 import debug, { setDebugEnabled } from './log';
 import NotesProvider, { getDailyNotePath, getNextDailyDate } from './notes/provider';
-import { applyDefaultSettings, type ISettings, TIME_REGEX } from './settings';
+import { applyDefaultSettings, type ISettings, TIME_REGEX, toSavedSettings } from './settings';
 import { DEFAULT_DEVICE_SETTINGS, type IDeviceSettings, type LocalStorageApp, loadDeviceSettings, saveDeviceSettings } from './settings/device';
 import AutoPeriodicNotesSettingsTab from './settings/tab';
 import type { ObsidianApp, ObsidianWorkspace } from './types';
@@ -126,7 +126,7 @@ export default class AutoPeriodicNotes extends Plugin {
   async updateSettings(settings: ISettings): Promise<void> {
     this.settings = settings;
     setDebugEnabled(this.settings.debug);
-    await this.saveData(this.settings);
+    await this.saveData(toSavedSettings(this.settings));
     this.onSettingsUpdate();
 
     // Always reschedule custom time when settings change
@@ -286,7 +286,6 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private scheduleDailyCheck(): void {
-    const dailySettings = this.settings.daily;
     const scheduledTime = this.getScheduledTime();
 
     debug(`[scheduledTime] Checking settings: scheduledTime=${scheduledTime}`);
@@ -384,7 +383,8 @@ export default class AutoPeriodicNotes extends Plugin {
 
     const scheduledTime = this.getScheduledTime();
     if (!scheduledTime) {
-      debug('[Visibility] Advanced scheduling not enabled or no scheduled time configured, skipping');
+      debug('[Visibility] No switch time, checking today\'s notes');
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
       return;
     }
 

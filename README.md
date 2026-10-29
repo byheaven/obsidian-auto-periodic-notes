@@ -20,8 +20,6 @@ This plugin respects the settings of the Periodic Notes plugin, creating your no
 
 ## Settings
 
-![Example of Settings screen within Obsidian](/docs/settings.png)
-
 The settings are grouped by what you want to decide:
 
 - **This device**: whether this device creates notes.

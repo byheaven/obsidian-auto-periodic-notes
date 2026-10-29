@@ -54,6 +54,26 @@ export function nextSwitchOnThisDevice(scheduledTime: string, now: Date = new Da
   };
 }
 
+// The moment the current daily note gives way to the next one: the note's own UTC date at the switch time.
+export function switchFromNote(noteDate: string, scheduledTime: string): LocalSwitchTime | null {
+  const time = scheduledTime.match(TIME_REGEX);
+  const date = noteDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!time || !date) {
+    return null;
+  }
+  const instant = new Date(Date.UTC(+date[1], +date[2] - 1, +date[3], +time[1], +time[2]));
+  return {
+    localTime: `${String(instant.getHours()).padStart(2, '0')}:${String(instant.getMinutes()).padStart(2, '0')}`,
+    zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}
+
+// Interim: devices still running 0.6.x read enableAdvancedScheduling from the synced data.json and stop
+// switching without it. Keep writing it until every device runs 0.7.0 or later, then remove this.
+export function toSavedSettings(settings: ISettings): ISettings & { daily: { enableAdvancedScheduling: boolean } } {
+  return { ...settings, daily: { ...settings.daily, enableAdvancedScheduling: settings.daily.scheduledTime !== '' } };
+}
+
 // Fields older versions stored in the synced data.json: alwaysOpen is now each note type's openAndPin,
 // enableAdvancedScheduling is a non-empty scheduledTime, createTomorrowsNote never changed the switch,
 // and device-specific values live in ./device.
@@ -87,7 +107,7 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
 });
 
 export function applyDefaultSettings(savedSettings: SavedSettings | null | undefined): ISettings {
-  const { enableAdvancedScheduling, createTomorrowsNote: _ignored, ...savedDaily } = savedSettings?.daily ?? {};
+  const { enableAdvancedScheduling, createTomorrowsNote, ...savedDaily } = savedSettings?.daily ?? {};
   const scheduledTime = enableAdvancedScheduling !== false && typeof savedDaily.scheduledTime === 'string' && TIME_REGEX.test(savedDaily.scheduledTime)
     ? savedDaily.scheduledTime
     : '';

@@ -176,8 +176,8 @@ export default class NotesProvider {
           } else {
             // Note already exists - check if we need to handle existing tabs
             const isStartup = context?.scheduleName === 'startup';
-            const shouldCloseOldNotes = isStartup && setting.closeExisting;
             const shouldUnpinOldNotes = isScheduledTime && dailySettings.unpinOldDailyNotes;
+            const shouldCloseOldNotes = (isStartup || isScheduledTime) && setting.closeExisting && !shouldUnpinOldNotes;
             // Always handle tabs for scheduledTime so that the note gets opened even if it already exists
             const shouldHandleTabs = setting.openAndPin || shouldCloseOldNotes || shouldUnpinOldNotes || isScheduledTime;
 
@@ -218,8 +218,8 @@ export default class NotesProvider {
             if (processTemplater) {
               await processTemplaterInFile(this.app, newNote, true);
             }
-          } else if (setting.openAndPin) {
-            debug(`Set to always open notes, getting current ${term} note`);
+          } else if (setting.openAndPin || (context?.scheduleName === 'startup' && setting.closeExisting)) {
+            debug(`Handling tabs for the current ${term} note`);
             const existingNote: TFile = cls.getCurrent();
             await this.handleClose(setting, cls, existingNote);
             await this.handleOpen(setting, existingNote, term);
@@ -318,8 +318,8 @@ export default class NotesProvider {
             if (processTemplater) {
               await processTemplaterInFile(this.app, newNote, true);
             }
-          } else if (setting.openAndPin) {
-            debug(`Set to always open notes, getting current ${term} note`);
+          } else if (setting.openAndPin || (context?.scheduleName === 'startup' && setting.closeExisting)) {
+            debug(`Handling tabs for the current ${term} note`);
             const existingNote: TFile = cls.getCurrent();
             await this.handleClose(setting, cls, existingNote);
             await this.handleOpen(setting, existingNote, term);
