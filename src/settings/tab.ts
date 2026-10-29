@@ -1,6 +1,5 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
-import { IPeriodicity, ISettings } from '.';
-import { TIME_REGEX } from './device';
+import { IPeriodicity, ISettings, TIME_REGEX } from '.';
 import AutoPeriodicNotes from '..';
 
 export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
@@ -203,15 +202,16 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
     // Show dependent settings only if advanced scheduling is enabled
     if (settings.daily.enableAdvancedScheduling) {
       new Setting(advancedContainer)
-        .setName('Scheduled time on this device')
-        .setDesc('Time for the custom check (24-hour format), used only while this device creates notes. Stored on this device only and not synced.')
+        .setName('Scheduled time')
+        .setDesc('Time for the custom check (24-hour format), the same on every device. Every device opens and pins notes at this time; only devices that create notes create them.')
         .addText((text) => {
           text
             .setPlaceholder('HH:mm (e.g., 22:30)')
-            .setValue(this.plugin.deviceSettings.scheduledTime)
-            .onChange((val) => {
+            .setValue(settings.daily.scheduledTime)
+            .onChange(async (val) => {
               if (TIME_REGEX.test(val) || val === '') {
-                this.plugin.updateDeviceSettings({ scheduledTime: val });
+                settings.daily.scheduledTime = val;
+                await this.plugin.updateSettings(settings);
               } else {
                 new Notice('Invalid time format. Use HH:mm (e.g., 22:30)');
               }

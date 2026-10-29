@@ -23,6 +23,7 @@ describe('Daily Note Scheduling', () => {
     workspace.trigger = jest.fn();
     workspace.on = jest.fn();
     app.workspace = workspace;
+    app.vault = { on: jest.fn() } as unknown as ObsidianApp['vault'];
     localStorage = {};
     app.loadLocalStorage = jest.fn((key: string) => localStorage[key] ?? null);
     app.saveLocalStorage = jest.fn((key: string, value: unknown) => { localStorage[key] = value; });
@@ -166,8 +167,9 @@ describe('Daily Note Scheduling', () => {
     // Enable advanced scheduling for timer test
     freshPlugin.settings.daily.enableAdvancedScheduling = true;
     freshPlugin.settings.daily.available = true;
+    freshPlugin.settings.daily.scheduledTime = '22:30';
 
-    freshPlugin.updateDeviceSettings({ createNotes: true, scheduledTime: '22:30' });
+    freshPlugin.updateDeviceSettings({ createNotes: true });
     prepareLayoutReady(freshPlugin);
 
     // Spy on checkAndCreateNotes for fresh plugin
@@ -199,25 +201,20 @@ describe('Daily Note Scheduling', () => {
       return { sut, startupSpy, nextPeriodSpy };
     }
 
-    it('is off by default and never schedules creation, even with times left in synced data.json', async () => {
-      jest.setSystemTime(new Date('2025-11-29T23:00:00'));
+    it('is off by default and writes nothing to the synced data.json on load', async () => {
       const legacyData = {
         ...DEFAULT_SETTINGS,
-        daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true, scheduledTime: '22:30' },
         deviceSettings: { 'some-host': { scheduledTime: '22:00', lastExecutionDate: '2025-11-28' } },
       };
 
-      const { sut, startupSpy, nextPeriodSpy } = await startPlugin(undefined, legacyData);
+      const { sut } = await startPlugin(undefined, legacyData);
 
       expect(sut.canCreateNotes()).toBe(false);
-      expect(startupSpy).toHaveBeenCalledTimes(1);
-      expect(nextPeriodSpy).not.toHaveBeenCalled();
-      expect(jest.getTimerCount()).toBe(0);
       expect(sut.saveData).not.toHaveBeenCalled();
       expect(app.saveLocalStorage).not.toHaveBeenCalled();
     });
 
-    it('drops legacy device fields from the synced settings', async () => {
+    it('keeps the synced scheduled time and drops legacy device fields', async () => {
       const legacyData = {
         ...DEFAULT_SETTINGS,
         daily: { ...DEFAULT_SETTINGS.daily, scheduledTime: '22:30' },
@@ -227,21 +224,21 @@ describe('Daily Note Scheduling', () => {
       const { sut } = await startPlugin(undefined, legacyData);
 
       expect(sut.settings).not.toHaveProperty('deviceSettings');
-      expect(sut.settings.daily).not.toHaveProperty('scheduledTime');
+      expect(sut.settings.daily.scheduledTime).toBe('22:30');
     });
 
     it('runs the scheduled task on a creating device and records the run only in local storage', async () => {
       jest.setSystemTime(new Date('2025-11-29T21:59:00'));
       const advancedData = {
         ...DEFAULT_SETTINGS,
-        daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true },
+        daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true, scheduledTime: '22:00' },
       };
 
-      const { sut, nextPeriodSpy } = await startPlugin({ createNotes: true, scheduledTime: '22:00', lastExecutionDate: null }, advancedData);
+      const { sut, nextPeriodSpy } = await startPlugin({ createNotes: true, lastExecutionDate: null }, advancedData);
       await jest.advanceTimersByTimeAsync(60 * 1000);
 
       expect(nextPeriodSpy).toHaveBeenCalledTimes(1);
-      expect(localStorage[deviceKey()]).toEqual({ createNotes: true, scheduledTime: '22:00', lastExecutionDate: '2025-11-29' });
+      expect(localStorage[deviceKey()]).toEqual({ createNotes: true, lastExecutionDate: '2025-11-29' });
       expect(sut.saveData).not.toHaveBeenCalled();
     });
 
@@ -251,27 +248,8 @@ describe('Daily Note Scheduling', () => {
 
       sut.updateDeviceSettings({ createNotes: true });
       await jest.advanceTimersByTimeAsync(0);
-      sut.updateDeviceSettings({ scheduledTime: '22:00' });
-      await jest.advanceTimersByTimeAsync(0);
 
       expect(startupSpy).toHaveBeenCalledTimes(2);
-    });
-
-    it('stops scheduling once creation is turned off on the device', async () => {
-      const advancedData = {
-        ...DEFAULT_SETTINGS,
-        daily: { ...DEFAULT_SETTINGS.daily, enableAdvancedScheduling: true },
-      };
-      const { sut, nextPeriodSpy } = await startPlugin({ createNotes: true, scheduledTime: '22:00', lastExecutionDate: null }, advancedData);
-      expect(jest.getTimerCount()).toBe(1);
-
-      sut.updateDeviceSettings({ createNotes: false });
-      await jest.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
-
-      expect(jest.getTimerCount()).toBe(0);
-      expect(nextPeriodSpy).not.toHaveBeenCalled();
-      expect(localStorage[deviceKey()]).toEqual({ createNotes: false, scheduledTime: '22:00', lastExecutionDate: null });
-      expect(sut.saveData).not.toHaveBeenCalled();
     });
   });
 });

@@ -18,6 +18,7 @@ export interface IDailySettings extends IPeriodicitySettings {
   enableAdvancedScheduling: boolean;
   createTomorrowsNote: boolean;
   unpinOldDailyNotes: boolean;
+  scheduledTime: string;  // HH:mm, empty when no scheduled run
 }
 
 export interface ISettings {
@@ -31,9 +32,11 @@ export interface ISettings {
   yearly: IPeriodicitySettings;
 }
 
-// Fields older versions stored in the synced data.json; device-specific values now live in ./device.
+export const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+// deviceSettings is a field older versions stored in the synced data.json; device-specific values now live in ./device.
 type SavedSettings = Partial<Omit<ISettings, 'daily'>> & {
-  daily?: Partial<IDailySettings> & { scheduledTime?: string };
+  daily?: Partial<IDailySettings>;
   deviceSettings?: unknown;
 };
 
@@ -54,7 +57,8 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
     openAtFirstPosition: false,
     enableAdvancedScheduling: false,
     createTomorrowsNote: false,
-    unpinOldDailyNotes: false
+    unpinOldDailyNotes: false,
+    scheduledTime: '',
   },
   weekly: { ...DEFAULT_PERIODICITY_SETTINGS },
   monthly: { ...DEFAULT_PERIODICITY_SETTINGS },
@@ -63,7 +67,7 @@ export const DEFAULT_SETTINGS: ISettings = Object.freeze({
 });
 
 export function applyDefaultSettings(savedSettings: SavedSettings | null | undefined): ISettings {
-  const { scheduledTime: _legacyScheduledTime, ...savedDaily } = savedSettings?.daily ?? {};
+  const savedDaily = savedSettings?.daily ?? {};
   // Perform deep merge to ensure new fields get default values
   const result: ISettings = {
     alwaysOpen: savedSettings?.alwaysOpen ?? DEFAULT_SETTINGS.alwaysOpen,
@@ -72,6 +76,7 @@ export function applyDefaultSettings(savedSettings: SavedSettings | null | undef
     daily: {
       ...DEFAULT_SETTINGS.daily,
       ...savedDaily,
+      scheduledTime: typeof savedDaily.scheduledTime === 'string' && TIME_REGEX.test(savedDaily.scheduledTime) ? savedDaily.scheduledTime : '',
     },
     weekly: {
       ...DEFAULT_SETTINGS.weekly,

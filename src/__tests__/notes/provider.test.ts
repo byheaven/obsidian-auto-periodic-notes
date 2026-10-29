@@ -121,6 +121,7 @@ describe('Notes Provider', () => {
         enableAdvancedScheduling: false,
         createTomorrowsNote: false,
         unpinOldDailyNotes: false,
+        scheduledTime: '',
       },
       weekly: {
         available: false,

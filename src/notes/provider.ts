@@ -1,4 +1,5 @@
 import { moment, Notice, TFile, WorkspaceLeaf, App } from 'obsidian';
+import type { Moment } from 'moment';
 import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
@@ -19,6 +20,24 @@ import { processTemplaterInFile } from '../templater';
 import type AutoPeriodicNotes from '../index';
 
 const DEFAULT_WAIT_TIMEOUT: number = 1000;
+
+export function getNextDailyDate(from: Moment, excludeWeekends: boolean): Moment {
+  let date = from.clone().add(1, 'day');
+  if (excludeWeekends) {
+    while (date.format('dd') === 'Sa' || date.format('dd') === 'Su') {
+      date = date.add(1, 'day');
+    }
+  }
+  return date;
+}
+
+export function getDailyNotePath(date: Moment): string {
+  const noteSettings = getDailyNoteSettings();
+  const format = noteSettings.format || DEFAULT_DAILY_NOTE_FORMAT;
+  const folder = noteSettings.folder?.trim() || '';
+  const filename = date.format(format);
+  return folder ? `${folder}/${filename}.md` : `${filename}.md`;
+}
 
 export interface CheckContext {
   scheduleName?: 'scheduledTime' | 'lateExecution' | 'startup';
@@ -81,27 +100,11 @@ export default class NotesProvider {
 
           // Apply next period offset if requested
           if (nextPeriod) {
-            targetDate = targetDate.add(1, 'day');
-
-            // Skip weekends if excludeWeekends enabled
-            if (dailySettings.excludeWeekends) {
-              while (targetDate.format('dd') === 'Sa' || targetDate.format('dd') === 'Su') {
-                targetDate = targetDate.add(1, 'day');
-              }
-            }
-
+            targetDate = getNextDailyDate(targetDate, dailySettings.excludeWeekends);
             debug(`Target date for next period: ${targetDate.format('YYYY-MM-DD')}`);
           } else if (isScheduledTime && dailySettings.createTomorrowsNote) {
             // Legacy: Only create tomorrow's note if this is the custom scheduled time AND createTomorrowsNote is enabled
-            targetDate = targetDate.add(1, 'day');
-
-            // Skip weekends if excludeWeekends enabled
-            if (dailySettings.excludeWeekends) {
-              while (targetDate.format('dd') === 'Sa' || targetDate.format('dd') === 'Su') {
-                targetDate = targetDate.add(1, 'day');
-              }
-            }
-
+            targetDate = getNextDailyDate(targetDate, dailySettings.excludeWeekends);
             debug(`Target date for custom scheduled time: ${targetDate.format('YYYY-MM-DD')}`);
           } else if (dailySettings.excludeWeekends) {
             // Check weekends for today's note
@@ -119,12 +122,7 @@ export default class NotesProvider {
           // Fallback: if cache doesn't have the note, check filesystem directly
           // This handles synced files that haven't been indexed yet
           if (!existingNote) {
-            const noteSettings = getDailyNoteSettings();
-            const format = noteSettings.format || DEFAULT_DAILY_NOTE_FORMAT;
-            const folder = noteSettings.folder?.trim() || '';
-            const filename = targetDate.format(format);
-            const filepath = folder ? `${folder}/${filename}.md` : `${filename}.md`;
-
+            const filepath = getDailyNotePath(targetDate);
             const file = this.app.vault.getAbstractFileByPath(filepath);
             // Check if file exists and is a file (not a folder) - use duck typing for test compatibility
             if (file && 'path' in file && (file as TFile).path?.endsWith('.md')) {
