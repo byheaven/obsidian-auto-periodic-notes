@@ -1,4 +1,5 @@
 import { moment, Notice, TFile, WorkspaceLeaf, App } from 'obsidian';
+import type { Moment } from 'moment';
 import { IDailySettings, IPeriodicitySettings, ISettings } from 'src/settings';
 import { ObsidianWorkspace } from 'src/types';
 import debug from '../log';
@@ -20,6 +21,24 @@ import type AutoPeriodicNotes from '../index';
 
 const DEFAULT_WAIT_TIMEOUT: number = 1000;
 
+export function getNextDailyDate(from: Moment, excludeWeekends: boolean): Moment {
+  let date = from.clone().add(1, 'day');
+  if (excludeWeekends) {
+    while (date.format('dd') === 'Sa' || date.format('dd') === 'Su') {
+      date = date.add(1, 'day');
+    }
+  }
+  return date;
+}
+
+export function getDailyNotePath(date: Moment): string {
+  const noteSettings = getDailyNoteSettings();
+  const format = noteSettings.format || DEFAULT_DAILY_NOTE_FORMAT;
+  const folder = noteSettings.folder?.trim() || '';
+  const filename = date.format(format);
+  return folder ? `${folder}/${filename}.md` : `${filename}.md`;
+}
+
 export interface CheckContext {
   scheduleName?: 'scheduledTime' | 'lateExecution' | 'startup';
 }
@@ -30,6 +49,7 @@ export default class NotesProvider {
   private workspaceLeaves: Record<string, WorkspaceLeaf>;
   private app: App;
   private plugin: AutoPeriodicNotes;
+  private previousRun: Promise<void> = Promise.resolve();
 
   constructor(workspace: ObsidianWorkspace, app: App, plugin: AutoPeriodicNotes, waitTimeout?: number) {
     this.workspace = workspace;
@@ -41,22 +61,28 @@ export default class NotesProvider {
 
   async checkAndCreateNotes(settings: ISettings, context?: CheckContext): Promise<void> {
     debug(`Checking if any new notes need to be created (context: ${context?.scheduleName || 'manual'})`);
-
-    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context);
-    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context);
+    await this.runAfterPreviousRun(() => this.checkAndCreateAllNotes(settings, context, false));
   }
 
   async checkAndCreateNextPeriodNotes(settings: ISettings, context?: CheckContext): Promise<void> {
     debug(`Creating next period notes (context: ${context?.scheduleName || 'manual'})`);
+    await this.runAfterPreviousRun(() => this.checkAndCreateAllNotes(settings, context, true));
+  }
 
-    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context, true);
-    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context, true);
+  // Startup, wake, the scheduled time and sync arrivals can overlap; each run reads the open tabs once and
+  // pauses after closing tabs, so a run that interleaved with another would open a second tab for the same note.
+  private runAfterPreviousRun(run: () => Promise<void>): Promise<void> {
+    const result = this.previousRun.then(run);
+    this.previousRun = result.catch(() => undefined);
+    return result;
+  }
+
+  private async checkAndCreateAllNotes(settings: ISettings, context: CheckContext | undefined, nextPeriod: boolean): Promise<void> {
+    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
   }
 
   private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean, context?: CheckContext, nextPeriod: boolean = false): Promise<void> {
@@ -81,27 +107,11 @@ export default class NotesProvider {
 
           // Apply next period offset if requested
           if (nextPeriod) {
-            targetDate = targetDate.add(1, 'day');
-
-            // Skip weekends if excludeWeekends enabled
-            if (dailySettings.excludeWeekends) {
-              while (targetDate.format('dd') === 'Sa' || targetDate.format('dd') === 'Su') {
-                targetDate = targetDate.add(1, 'day');
-              }
-            }
-
+            targetDate = getNextDailyDate(targetDate, dailySettings.excludeWeekends);
             debug(`Target date for next period: ${targetDate.format('YYYY-MM-DD')}`);
           } else if (isScheduledTime && dailySettings.createTomorrowsNote) {
             // Legacy: Only create tomorrow's note if this is the custom scheduled time AND createTomorrowsNote is enabled
-            targetDate = targetDate.add(1, 'day');
-
-            // Skip weekends if excludeWeekends enabled
-            if (dailySettings.excludeWeekends) {
-              while (targetDate.format('dd') === 'Sa' || targetDate.format('dd') === 'Su') {
-                targetDate = targetDate.add(1, 'day');
-              }
-            }
-
+            targetDate = getNextDailyDate(targetDate, dailySettings.excludeWeekends);
             debug(`Target date for custom scheduled time: ${targetDate.format('YYYY-MM-DD')}`);
           } else if (dailySettings.excludeWeekends) {
             // Check weekends for today's note
@@ -119,12 +129,7 @@ export default class NotesProvider {
           // Fallback: if cache doesn't have the note, check filesystem directly
           // This handles synced files that haven't been indexed yet
           if (!existingNote) {
-            const noteSettings = getDailyNoteSettings();
-            const format = noteSettings.format || DEFAULT_DAILY_NOTE_FORMAT;
-            const folder = noteSettings.folder?.trim() || '';
-            const filename = targetDate.format(format);
-            const filepath = folder ? `${folder}/${filename}.md` : `${filename}.md`;
-
+            const filepath = getDailyNotePath(targetDate);
             const file = this.app.vault.getAbstractFileByPath(filepath);
             // Check if file exists and is a file (not a folder) - use duck typing for test compatibility
             if (file && 'path' in file && (file as TFile).path?.endsWith('.md')) {
@@ -402,6 +407,8 @@ export default class NotesProvider {
     const shouldOpenAtFirstPosition = term === 'daily' &&
       'openAtFirstPosition' in setting &&
       (setting as any).openAtFirstPosition;
+    // Re-read the tabs: while this run paused after closing tabs, the user or another plugin may have opened the note
+    this.workspaceLeaves = {};
     let leaf: WorkspaceLeaf | undefined = this.getOpenWorkspaceLeaves()[note.path];
 
     debug(`handleOpen called: notePath=${note.path}, isAlreadyOpen=${!!leaf}`);

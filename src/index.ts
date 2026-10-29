@@ -1,11 +1,11 @@
-import { Notice, Plugin, type PluginManifest, Workspace, WorkspaceLeaf } from 'obsidian';
+import { moment, Notice, Plugin, type PluginManifest, type TAbstractFile, Workspace, WorkspaceLeaf } from 'obsidian';
 import { ObsidianAppWithPlugins, PERIODIC_NOTES_EVENT_SETTING_UPDATED, PeriodicNotesPluginAdapter } from 'obsidian-periodic-notes-provider';
 import { around } from 'monkey-around';
 import { SETTINGS_UPDATED } from './events';
 import debug, { setDebugEnabled } from './log';
-import NotesProvider from './notes/provider';
-import { applyDefaultSettings, type ISettings } from './settings';
-import { DEFAULT_DEVICE_SETTINGS, type IDeviceSettings, type LocalStorageApp, loadDeviceSettings, saveDeviceSettings, TIME_REGEX } from './settings/device';
+import NotesProvider, { getDailyNotePath, getNextDailyDate } from './notes/provider';
+import { applyDefaultSettings, type ISettings, TIME_REGEX } from './settings';
+import { DEFAULT_DEVICE_SETTINGS, type IDeviceSettings, type LocalStorageApp, loadDeviceSettings, saveDeviceSettings } from './settings/device';
 import AutoPeriodicNotesSettingsTab from './settings/tab';
 import type { ObsidianApp, ObsidianWorkspace } from './types';
 
@@ -66,6 +66,36 @@ export default class AutoPeriodicNotes extends Plugin {
 
     // Set up Visibility API listener to detect sleep/wake recovery
     this.setupVisibilityListener();
+
+    // Registered after layout ready because Obsidian fires 'create' for every file while loading the vault
+    this.registerEvent(this.app.vault.on('create', (file) => this.handleCreatedFile(file)));
+  }
+
+  // A device that does not create notes waits for the note to arrive from the creating device through sync
+  private handleCreatedFile(file: TAbstractFile): void {
+    if (file.path !== this.currentDailyNotePath()) {
+      return;
+    }
+    debug(`[Arrival] Current daily note ${file.path} appeared, handling its tabs`);
+    this.runStartupLogic();
+  }
+
+  private currentDailyNotePath(): string {
+    const now = moment();
+    const target = this.isAfterScheduledTime(now.toDate())
+      ? getNextDailyDate(now, this.settings.daily.excludeWeekends)
+      : now;
+    return getDailyNotePath(target);
+  }
+
+  // Called by Obsidian when data.json changes on disk, e.g. when Sync brings settings from another device
+  async onExternalSettingsChange(): Promise<void> {
+    await this.loadSettings();
+    if (!this.periodicNotesPlugin.isEnabled()) {
+      return;
+    }
+    this.syncPeriodicNotesSettings();
+    this.scheduleDailyCheck();
   }
 
   // Execute appropriate startup logic based on current time vs scheduled time
@@ -200,16 +230,25 @@ export default class AutoPeriodicNotes extends Plugin {
     return this.deviceSettings.createNotes;
   }
 
-  // Only a device that creates notes runs the scheduled task.
   private getScheduledTime(): string {
-    return this.canCreateNotes() ? this.deviceSettings.scheduledTime : '';
+    return this.settings.daily.enableAdvancedScheduling ? this.settings.daily.scheduledTime : '';
+  }
+
+  private isAfterScheduledTime(now: Date): boolean {
+    const scheduledTime = this.getScheduledTime();
+    if (!scheduledTime) {
+      return false;
+    }
+    const [hours, minutes] = this.parseScheduledTime(scheduledTime);
+    const todayTarget = new Date(now);
+    todayTarget.setHours(hours, minutes, 0, 0);
+    return now.getTime() >= todayTarget.getTime();
   }
 
   public updateDeviceSettings(changes: Partial<IDeviceSettings>): void {
     const wasCreatingNotes = this.canCreateNotes();
     this.persistDeviceSettings(changes);
-    debug(`Device settings changed to ${JSON.stringify(this.deviceSettings)}, rescheduling...`);
-    this.scheduleDailyCheck();
+    debug(`Device settings changed to ${JSON.stringify(this.deviceSettings)}`);
     if (!wasCreatingNotes && this.canCreateNotes()) {
       debug('Note creation turned on for this device, catching up');
       this.runStartupLogic();
@@ -233,10 +272,10 @@ export default class AutoPeriodicNotes extends Plugin {
     const dailySettings = this.settings.daily;
     const scheduledTime = this.getScheduledTime();
 
-    debug(`[scheduledTime] Checking settings: createNotes=${this.canCreateNotes()}, enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
+    debug(`[scheduledTime] Checking settings: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
 
     // Only schedule if enabled AND has valid time
-    if (!dailySettings.enableAdvancedScheduling || !scheduledTime) {
+    if (!scheduledTime) {
       debug(`[scheduledTime] Not scheduling - conditions not met`);
       this.clearScheduledTimeout('scheduledTime');
       return;
@@ -326,32 +365,18 @@ export default class AutoPeriodicNotes extends Plugin {
     }
     this.lastVisibilityCheckTime = now;
 
-    // Only handle cases where advanced scheduling is enabled
-    if (!this.settings.daily.enableAdvancedScheduling) {
-      debug('[Visibility] Advanced scheduling not enabled, skipping');
-      return;
-    }
-
     const scheduledTime = this.getScheduledTime();
     if (!scheduledTime) {
-      debug('[Visibility] No scheduled time configured, skipping');
+      debug('[Visibility] Advanced scheduling not enabled or no scheduled time configured, skipping');
       return;
     }
 
     const currentDate = new Date();
     const todayString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
-    const [hours, minutes] = this.parseScheduledTime(scheduledTime);
 
-    // Build today's target time
-    const todayTarget = new Date(currentDate);
-    todayTarget.setHours(hours, minutes, 0, 0);
+    debug(`[Visibility] Checking: now=${currentDate.toISOString()}, scheduledTime=${scheduledTime}, lastExecution=${this.getLastExecutionDate()}`);
 
-    const currentTime = currentDate.getTime();
-    const targetTime = todayTarget.getTime();
-
-    debug(`[Visibility] Checking: now=${currentDate.toISOString()}, target=${todayTarget.toISOString()}, lastExecution=${this.getLastExecutionDate()}`);
-
-    if (currentTime < targetTime) {
+    if (!this.isAfterScheduledTime(currentDate)) {
       // Case 1: Current time is before the scheduled time
       // Run today's startup check and reschedule timer
       debug('[Visibility] Before scheduled time, running startup check and rescheduling');
@@ -388,11 +413,6 @@ export default class AutoPeriodicNotes extends Plugin {
       console.log('[Auto Periodic Notes] Creating next period notes (tomorrow)');
       await this.notes.checkAndCreateNextPeriodNotes(this.settings, { scheduleName: 'scheduledTime' });
 
-      if (!this.canCreateNotes()) {
-        debug('[Execution] Note creation was turned off during the task, not marking it as executed');
-        return;
-      }
-
       // Mark execution date and persist to settings
       this.setLastExecutionDate(todayString);
       debug(`[Execution] Marked and persisted execution date: ${todayString}`);
@@ -411,33 +431,12 @@ export default class AutoPeriodicNotes extends Plugin {
    * - After scheduled time: run scheduled task logic (create tomorrow's note + unpin old)
    */
   private async executeStartupLogic(): Promise<void> {
-    // If advanced scheduling is not enabled, always use today's startup logic
-    if (!this.settings.daily.enableAdvancedScheduling) {
-      debug('[Startup] Advanced scheduling not enabled, using today startup logic');
-      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
-      return;
-    }
-
-    const scheduledTime = this.getScheduledTime();
-    if (!scheduledTime) {
-      debug('[Startup] No scheduled time configured, using today startup logic');
-      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
-      return;
-    }
-
     const now = new Date();
-    const [hours, minutes] = this.parseScheduledTime(scheduledTime);
+    const scheduledTime = this.getScheduledTime();
 
-    // Build today's target time
-    const todayTarget = new Date(now);
-    todayTarget.setHours(hours, minutes, 0, 0);
+    debug(`[Startup] Checking: now=${now.toISOString()}, scheduledTime=${scheduledTime}`);
 
-    const currentTime = now.getTime();
-    const targetTime = todayTarget.getTime();
-
-    debug(`[Startup] Checking: now=${now.toISOString()}, scheduledTime=${scheduledTime}, target=${todayTarget.toISOString()}`);
-
-    if (currentTime > targetTime) {
+    if (this.isAfterScheduledTime(now)) {
       // After scheduled time: directly run scheduled task logic
       debug('[Startup] After scheduled time, executing scheduled task directly');
       console.log(`[Auto Periodic Notes] Startup after ${scheduledTime}, creating tomorrow's note...`);
