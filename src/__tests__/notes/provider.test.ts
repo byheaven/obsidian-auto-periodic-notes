@@ -108,7 +108,6 @@ describe('Notes Provider', () => {
   
   beforeEach(() => {
     settings = {
-      alwaysOpen: false,
       processTemplater: false,
       debug: false,
       daily: {
@@ -118,8 +117,6 @@ describe('Notes Provider', () => {
         openAndPin: false,
         excludeWeekends: false,
         openAtFirstPosition: false,
-        enableAdvancedScheduling: false,
-        createTomorrowsNote: false,
         unpinOldDailyNotes: false,
         scheduledTime: '',
       },
@@ -614,7 +611,6 @@ describe('Notes Provider', () => {
   });
 
   it('closes open files and pins new ones even when not creating', async () => {
-    settings.alwaysOpen = true;
     settings.daily.available = true;
     settings.daily.enabled = true;
     settings.daily.closeExisting = true;
@@ -669,9 +665,6 @@ describe('Notes Provider', () => {
     settings.daily.available = true;
     settings.daily.enabled = true;
     settings.daily.openAndPin = true;
-    settings.daily.enableAdvancedScheduling = true;
-    // Don't use createTomorrowsNote to avoid timezone issues in tests
-    settings.daily.createTomorrowsNote = false;
 
     // Mock Date to a specific date (use noon to avoid timezone issues)
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2025-01-20T12:00:00Z').getTime());
@@ -927,7 +920,6 @@ describe('Notes Provider', () => {
     });
 
     it('still opens and pins a daily note that already exists', async () => {
-      settings.alwaysOpen = true;
       settings.daily.openAndPin = true;
 
       const existingFile = new TFile();

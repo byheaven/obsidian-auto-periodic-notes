@@ -82,11 +82,17 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private currentDailyNotePath(): string {
+    return getDailyNotePath(this.currentDailyDate());
+  }
+
+  // The daily note the triggers keep pinned now. With a switch time and weekends skipped, Friday's switch
+  // already moved to Monday's note, so Saturday and Sunday keep it.
+  public currentDailyDate(): Moment {
+    const { excludeWeekends } = this.settings.daily;
     const now = this.dayClock();
-    const target = this.isAfterScheduledTime(now.toDate())
-      ? getNextDailyDate(now, this.settings.daily.excludeWeekends)
-      : now;
-    return getDailyNotePath(target);
+    const date = this.isAfterScheduledTime(now.toDate()) ? getNextDailyDate(now, excludeWeekends) : now;
+    const keepsMonday = this.usesUtcDays() && excludeWeekends && ['Sa', 'Su'].includes(date.format('dd'));
+    return keepsMonday ? getNextDailyDate(date, true) : date;
   }
 
   // Called by Obsidian when data.json changes on disk, e.g. when Sync brings settings from another device
@@ -232,7 +238,7 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private getScheduledTime(): string {
-    return this.settings.daily.enableAdvancedScheduling ? this.settings.daily.scheduledTime : '';
+    return this.settings.daily.scheduledTime;
   }
 
   // With a scheduled time set, days run on UTC so every device agrees on the current daily note
@@ -283,7 +289,7 @@ export default class AutoPeriodicNotes extends Plugin {
     const dailySettings = this.settings.daily;
     const scheduledTime = this.getScheduledTime();
 
-    debug(`[scheduledTime] Checking settings: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
+    debug(`[scheduledTime] Checking settings: scheduledTime=${scheduledTime}`);
 
     // Only schedule if enabled AND has valid time
     if (!scheduledTime) {

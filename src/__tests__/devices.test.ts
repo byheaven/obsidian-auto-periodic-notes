@@ -1,9 +1,10 @@
 /** @jest-environment ./src/test-environments/time-zone-environment.js */
 import { readFileSync } from 'fs';
-import { EventRef, PluginManifest, PluginSettingTab, TAbstractFile } from 'obsidian';
+import { EventRef, PluginManifest, PluginSettingTab, Setting, TAbstractFile } from 'obsidian';
 import { DailyNote } from 'obsidian-periodic-notes-provider';
 import AutoPeriodicNotes from '../';
 import { DEFAULT_SETTINGS } from '../settings';
+import AutoPeriodicNotesSettingsTab from '../settings/tab';
 import type { ObsidianApp } from '../types';
 
 declare const setTimeZone: (zone: string) => void;
@@ -58,16 +59,13 @@ const INBOX = 'Inbox.md';
 function syncedSettings(scheduledTime = '22:30'): Record<string, unknown> {
   return {
     ...DEFAULT_SETTINGS,
-    alwaysOpen: true,
     daily: {
       ...DEFAULT_SETTINGS.daily,
       enabled: true,
       openAndPin: true,
       openAtFirstPosition: true,
       closeExisting: true,
-      enableAdvancedScheduling: true,
       scheduledTime,
-      createTomorrowsNote: true,
       unpinOldDailyNotes: true,
     },
   };
@@ -487,9 +485,9 @@ describe('Tab handling across devices', () => {
       expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-31')]);
     });
 
-    it('uses UTC days with the advanced daily options off', async () => {
+    it('uses UTC days with unpinning at the switch time off', async () => {
       const data = syncedSettings('14:00') as { daily: Record<string, unknown> };
-      data.daily = { ...data.daily, createTomorrowsNote: false, unpinOldDailyNotes: false };
+      data.daily = { ...data.daily, unpinOldDailyNotes: false };
       const { tabs } = await startDevice({ createNotes: false, at: '2026-10-29T03:00:00Z', tabs: [[day('2026-10-28'), true]], data, localRecord: noRunYet(false) });
 
       expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-29')]);
@@ -520,5 +518,157 @@ describe('Tab handling across devices', () => {
     const { tabs } = await startDevice({ createNotes: false, at: '2026-10-29T17:00:00Z', data: syncedSettings('') });
 
     expect(tabs()).toEqual([[day('2026-10-30'), true]]);
+  });
+
+  // The settings tab rendered by a running device, read back through the Setting mock
+  describe('settings tab', () => {
+    type Rendered = {
+      name: string; desc: string; heading: boolean; disabled: boolean;
+      descEl: { classes: Set<string> };
+      toggles: { value: boolean; changeHandler: (val: boolean) => Promise<void> }[];
+      texts: { value: string; changeHandler: (val: string) => Promise<void> }[];
+      buttons: { text: string; attributes: Record<string, string>; clickHandler: () => void }[];
+    };
+    const rendered = () => (Setting as unknown as { rendered: Rendered[] }).rendered;
+    const find = (name: string) => rendered().find((setting) => setting.name === name)!;
+    const status = () => rendered().find((setting) => setting.name.startsWith('Current daily note'))!;
+
+    function openTab(device: AutoPeriodicNotes) {
+      rendered().length = 0;
+      const tab = new AutoPeriodicNotesSettingsTab(device.app, device);
+      (tab as unknown as { app: unknown }).app = device.app;
+      tab.containerEl = { empty: () => { rendered().length = 0; } } as unknown as HTMLElement;
+      tab.display();
+      return tab;
+    }
+
+    async function deviceAt(zone: string, at: string, createNotes: boolean, data = syncedSettings('14:00')) {
+      setTimeZone(zone);
+      const { device } = await startDevice({ createNotes, at, data, localRecord: { createNotes, lastExecutionDate: '2026-10-01' } });
+      return device;
+    }
+
+    it('groups the settings by task', async () => {
+      const device = await deviceAt('Asia/Shanghai', '2026-10-29T10:00:00Z', true);
+      for (const periodicity of ['weekly', 'monthly', 'quarterly', 'yearly'] as const) {
+        device.settings[periodicity].available = true;
+      }
+      (device.app as unknown as { plugins: unknown }).plugins = { plugins: { 'templater-obsidian': {} } };
+
+      openTab(device);
+
+      expect(rendered().map((setting) => (setting.heading ? '# ' : '') + setting.name)).toEqual([
+        '# This device', 'Create notes on this device',
+        '# Daily switch', 'Current daily note: 2026-10-29', 'Switch time (UTC)', 'Skip weekends',
+        '# Tabs', 'Pin the daily note', 'Put it in the first tab', 'Close older daily notes', 'At the switch time, only unpin them',
+        '# Create automatically', 'Daily notes', 'Weekly notes', 'Monthly notes', 'Quarterly notes', 'Yearly notes',
+        '# Advanced', 'Run Templater in new notes', 'Debug logging',
+      ]);
+    });
+
+    it.each([
+      ['Asia/Shanghai', '22:00'],
+      ['America/Los_Angeles', '07:00'],
+    ])('shows the current note and the next switch on a device in %s', async (zone, localTime) => {
+      const device = await deviceAt(zone, '2026-10-29T10:00:00Z', zone === 'Asia/Shanghai');
+
+      openTab(device);
+
+      expect(status().name).toBe('Current daily note: 2026-10-29');
+      expect(status().desc).toBe(`Switches to 2026-10-30 at ${localTime} on this device.`);
+      expect(find('Switch time (UTC)').desc).toBe(`${localTime} on this device (${zone}). Every device switches at the same moment.`);
+    });
+
+    it('shows the next switch at the local time it will have after a daylight saving change', async () => {
+      const device = await deviceAt('America/Los_Angeles', '2026-10-31T15:00:00Z', false);
+
+      openTab(device);
+
+      expect(status().name).toBe('Current daily note: 2026-11-01');
+      expect(status().desc).toBe('Switches to 2026-11-02 at 06:00 on this device.');
+    });
+
+    it('keeps Monday\'s note over a skipped weekend', async () => {
+      const data = syncedSettings('14:00') as { daily: Record<string, unknown> };
+      data.daily = { ...data.daily, excludeWeekends: true };
+      const device = await deviceAt('Asia/Shanghai', '2026-10-30T15:00:00Z', true, data);
+
+      openTab(device);
+
+      expect(status().name).toBe('Current daily note: 2026-11-02');
+      expect(status().desc).toBe('Switches to 2026-11-03 at 22:00 on this device.');
+    });
+
+    it('follows this device\'s date without a switch time', async () => {
+      const device = await deviceAt('America/Los_Angeles', '2026-10-29T02:00:00Z', false, syncedSettings(''));
+
+      openTab(device);
+
+      expect(status().name).toBe('Current daily note: 2026-10-28');
+      expect(status().desc).toBe('No switch time set.');
+      expect(find('At the switch time, only unpin them').disabled).toBe(true);
+    });
+
+    it('keeps the saved switch time while the field holds an invalid time', async () => {
+      const device = await deviceAt('Asia/Shanghai', '2026-10-29T15:00:00Z', true);
+      openTab(device);
+
+      await find('Switch time (UTC)').texts[0].changeHandler('25:00');
+
+      expect(find('Switch time (UTC)').desc).toBe('Use 24-hour time, for example 14:00.');
+      expect(find('Switch time (UTC)').descEl.classes.has('mod-warning')).toBe(true);
+      expect(device.settings.daily.scheduledTime).toBe('14:00');
+      expect(device.saveData).not.toHaveBeenCalled();
+      expect(status().name).toBe('Current daily note: 2026-10-30');
+      expect(find('At the switch time, only unpin them').disabled).toBe(false);
+    });
+
+    it('turns the switch off when the time is cleared and back on when it is set', async () => {
+      const device = await deviceAt('Asia/Shanghai', '2026-10-29T10:00:00Z', true);
+      openTab(device);
+      const switchTime = find('Switch time (UTC)');
+
+      await switchTime.texts[0].changeHandler('');
+      expect(device.settings.daily.scheduledTime).toBe('');
+      expect(status().desc).toBe('No switch time set.');
+      expect(find('At the switch time, only unpin them').disabled).toBe(true);
+      expect(device.settings.daily.unpinOldDailyNotes).toBe(true);
+
+      await switchTime.texts[0].changeHandler(' 15:30 ');
+      expect(device.settings.daily.scheduledTime).toBe('15:30');
+      expect(switchTime.desc).toBe('23:30 on this device (Asia/Shanghai). Every device switches at the same moment.');
+      expect(find('At the switch time, only unpin them').disabled).toBe(false);
+    });
+
+    it('disables the first-tab option while the daily note is not pinned', async () => {
+      const device = await deviceAt('Asia/Shanghai', '2026-10-29T10:00:00Z', true);
+      openTab(device);
+
+      await find('Pin the daily note').toggles[0].changeHandler(false);
+
+      expect(device.settings.daily.openAndPin).toBe(false);
+      expect(find('Put it in the first tab').disabled).toBe(true);
+      expect(device.settings.daily.openAtFirstPosition).toBe(true);
+    });
+
+    it('reveals a note type\'s own options, each saving one setting', async () => {
+      const device = await deviceAt('Asia/Shanghai', '2026-10-29T10:00:00Z', true);
+      device.settings.weekly.available = true;
+      device.settings.monthly.available = true;
+      openTab(device);
+      expect(find('Weekly notes').buttons[0].attributes['aria-expanded']).toBe('false');
+
+      find('Weekly notes').buttons[0].clickHandler();
+
+      const names = rendered().map((setting) => setting.name);
+      const weekly = names.indexOf('Weekly notes');
+      expect(names.slice(weekly, weekly + 4)).toEqual(['Weekly notes', 'Pin the weekly note', 'Close older weekly notes', 'Monthly notes']);
+      expect(find('Weekly notes').buttons[0].text).toBe('Hide options');
+      expect(find('Weekly notes').buttons[0].attributes['aria-expanded']).toBe('true');
+
+      const before = JSON.parse(JSON.stringify(device.settings));
+      await find('Pin the weekly note').toggles[0].changeHandler(true);
+      expect(device.settings).toEqual({ ...before, weekly: { ...before.weekly, openAndPin: true } });
+    });
   });
 });

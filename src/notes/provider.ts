@@ -84,14 +84,14 @@ export default class NotesProvider {
   }
 
   private async checkAndCreateAllNotes(settings: ISettings, context: CheckContext | undefined, nextPeriod: boolean): Promise<void> {
-    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
-    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
-    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
-    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
-    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.alwaysOpen, settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.yearly, new YearlyNote(), 'yearly', settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.quarterly, new QuarterlyNote(), 'quarterly', settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.monthly, new MonthlyNote(), 'monthly', settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.weekly, new WeeklyNote(), 'weekly', settings.processTemplater, context, nextPeriod);
+    await this.checkAndCreateSingleNote(settings.daily, new DailyNote(), 'daily', settings.processTemplater, context, nextPeriod);
   }
 
-  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, alwaysOpen: boolean, processTemplater: boolean, context?: CheckContext, nextPeriod: boolean = false): Promise<void> {
+  private async checkAndCreateSingleNote(setting: IPeriodicitySettings, cls: Note, term: string, processTemplater: boolean, context?: CheckContext, nextPeriod: boolean = false): Promise<void> {
     if (setting.available && setting.enabled) {
       // Clear workspace leaves cache to get fresh state for this note check
       // This prevents stale "ghost" leaves from affecting our checks
@@ -105,7 +105,7 @@ export default class NotesProvider {
 
         // Determine which behavior to use based on context
         const isScheduledTime = context?.scheduleName === 'scheduledTime';
-        const useAdvancedPath = isScheduledTime || nextPeriod || dailySettings.createTomorrowsNote || dailySettings.unpinOldDailyNotes || this.plugin.usesUtcDays();
+        const useAdvancedPath = isScheduledTime || nextPeriod || dailySettings.unpinOldDailyNotes || this.plugin.usesUtcDays();
 
         if (useAdvancedPath) {
           // Use obsidian-daily-notes-interface for date-specific operations
@@ -115,10 +115,6 @@ export default class NotesProvider {
           if (nextPeriod) {
             targetDate = getNextDailyDate(targetDate, dailySettings.excludeWeekends);
             debug(`Target date for next period: ${targetDate.format('YYYY-MM-DD')}`);
-          } else if (isScheduledTime && dailySettings.createTomorrowsNote) {
-            // Legacy: Only create tomorrow's note if this is the custom scheduled time AND createTomorrowsNote is enabled
-            targetDate = getNextDailyDate(targetDate, dailySettings.excludeWeekends);
-            debug(`Target date for custom scheduled time: ${targetDate.format('YYYY-MM-DD')}`);
           } else if (dailySettings.excludeWeekends) {
             // Check weekends for today's note
             const dayOfWeek = targetDate.format('dd');
@@ -183,7 +179,7 @@ export default class NotesProvider {
             const shouldCloseOldNotes = isStartup && setting.closeExisting;
             const shouldUnpinOldNotes = isScheduledTime && dailySettings.unpinOldDailyNotes;
             // Always handle tabs for scheduledTime so that the note gets opened even if it already exists
-            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || shouldUnpinOldNotes || isScheduledTime;
+            const shouldHandleTabs = setting.openAndPin || shouldCloseOldNotes || shouldUnpinOldNotes || isScheduledTime;
 
             if (shouldHandleTabs) {
               debug(`Daily note exists for ${targetDate.format('YYYY-MM-DD')}, handling existing tabs`);
@@ -194,7 +190,7 @@ export default class NotesProvider {
                 await this.handleClose(setting, cls, existingNote);
               }
 
-              // Open and pin today's note (for startup with closeExisting, or alwaysOpen)
+              // Open and pin today's note (for startup with closeExisting, or openAndPin)
               await this.handleOpen(setting, existingNote, term);
             }
           }
@@ -222,7 +218,7 @@ export default class NotesProvider {
             if (processTemplater) {
               await processTemplaterInFile(this.app, newNote, true);
             }
-          } else if (alwaysOpen) {
+          } else if (setting.openAndPin) {
             debug(`Set to always open notes, getting current ${term} note`);
             const existingNote: TFile = cls.getCurrent();
             await this.handleClose(setting, cls, existingNote);
@@ -294,7 +290,7 @@ export default class NotesProvider {
             // Note already exists - check if we need to handle existing tabs
             const isStartup = context?.scheduleName === 'startup';
             const shouldCloseOldNotes = isStartup && setting.closeExisting;
-            const shouldHandleTabs = alwaysOpen || shouldCloseOldNotes || isScheduledTime;
+            const shouldHandleTabs = setting.openAndPin || shouldCloseOldNotes || isScheduledTime;
 
             if (shouldHandleTabs) {
               debug(`${term} note exists for ${targetDate.format('YYYY-MM-DD')}, handling existing tabs`);
@@ -322,7 +318,7 @@ export default class NotesProvider {
             if (processTemplater) {
               await processTemplaterInFile(this.app, newNote, true);
             }
-          } else if (alwaysOpen) {
+          } else if (setting.openAndPin) {
             debug(`Set to always open notes, getting current ${term} note`);
             const existingNote: TFile = cls.getCurrent();
             await this.handleClose(setting, cls, existingNote);
