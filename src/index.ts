@@ -5,7 +5,7 @@ import { around } from 'monkey-around';
 import { SETTINGS_UPDATED } from './events';
 import debug, { setDebugEnabled } from './log';
 import NotesProvider, { getDailyNotePath, getNextDailyDate } from './notes/provider';
-import { applyDefaultSettings, type ISettings, TIME_REGEX } from './settings';
+import { applyDefaultSettings, type ISettings, TIME_REGEX, toSavedSettings } from './settings';
 import { DEFAULT_DEVICE_SETTINGS, type IDeviceSettings, type LocalStorageApp, loadDeviceSettings, saveDeviceSettings } from './settings/device';
 import AutoPeriodicNotesSettingsTab from './settings/tab';
 import type { ObsidianApp, ObsidianWorkspace } from './types';
@@ -22,6 +22,7 @@ export default class AutoPeriodicNotes extends Plugin {
     scheduledTime: null
   };
   private lastVisibilityCheckTime: number = 0;
+  private lastLocalDayChecked: string | null = null;
 
   constructor(app: ObsidianApp, manifest: PluginManifest) {
     super(app, manifest);
@@ -82,11 +83,17 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private currentDailyNotePath(): string {
+    return getDailyNotePath(this.currentDailyDate());
+  }
+
+  // The daily note the triggers keep pinned now. With a switch time and weekends skipped, Friday's switch
+  // already moved to Monday's note, so Saturday and Sunday keep it.
+  public currentDailyDate(): Moment {
+    const { excludeWeekends } = this.settings.daily;
     const now = this.dayClock();
-    const target = this.isAfterScheduledTime(now.toDate())
-      ? getNextDailyDate(now, this.settings.daily.excludeWeekends)
-      : now;
-    return getDailyNotePath(target);
+    const date = this.isAfterScheduledTime(now.toDate()) ? getNextDailyDate(now, excludeWeekends) : now;
+    const keepsMonday = this.usesUtcDays() && excludeWeekends && ['Sa', 'Su'].includes(date.format('dd'));
+    return keepsMonday ? getNextDailyDate(date, true) : date;
   }
 
   // Called by Obsidian when data.json changes on disk, e.g. when Sync brings settings from another device
@@ -120,7 +127,7 @@ export default class AutoPeriodicNotes extends Plugin {
   async updateSettings(settings: ISettings): Promise<void> {
     this.settings = settings;
     setDebugEnabled(this.settings.debug);
-    await this.saveData(this.settings);
+    await this.saveData(toSavedSettings(this.settings));
     this.onSettingsUpdate();
 
     // Always reschedule custom time when settings change
@@ -232,7 +239,7 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private getScheduledTime(): string {
-    return this.settings.daily.enableAdvancedScheduling ? this.settings.daily.scheduledTime : '';
+    return this.settings.daily.scheduledTime;
   }
 
   // With a scheduled time set, days run on UTC so every device agrees on the current daily note
@@ -280,10 +287,9 @@ export default class AutoPeriodicNotes extends Plugin {
   }
 
   private scheduleDailyCheck(): void {
-    const dailySettings = this.settings.daily;
     const scheduledTime = this.getScheduledTime();
 
-    debug(`[scheduledTime] Checking settings: enableAdvancedScheduling=${dailySettings.enableAdvancedScheduling}, scheduledTime=${scheduledTime}`);
+    debug(`[scheduledTime] Checking settings: scheduledTime=${scheduledTime}`);
 
     // Only schedule if enabled AND has valid time
     if (!scheduledTime) {
@@ -378,7 +384,14 @@ export default class AutoPeriodicNotes extends Plugin {
 
     const scheduledTime = this.getScheduledTime();
     if (!scheduledTime) {
-      debug('[Visibility] Advanced scheduling not enabled or no scheduled time configured, skipping');
+      const today = moment().format('YYYY-MM-DD');
+      if (today === this.lastLocalDayChecked) {
+        debug('[Visibility] No switch time and still the same day, skipping');
+        return;
+      }
+      debug('[Visibility] No switch time and a new day, checking today\'s notes');
+      this.lastLocalDayChecked = today;
+      await this.notes.checkAndCreateNotes(this.settings, { scheduleName: 'startup' });
       return;
     }
 
@@ -453,6 +466,7 @@ export default class AutoPeriodicNotes extends Plugin {
       console.log(`[Auto Periodic Notes] Startup after ${scheduledTime}, creating tomorrow's note...`);
       await this.executeCustomScheduledTask(false);
     } else {
+      this.lastLocalDayChecked = moment().format('YYYY-MM-DD');
       // Before scheduled time: run today's startup logic
       debug('[Startup] Before scheduled time, using today startup logic');
       console.log(`[Auto Periodic Notes] Startup before ${scheduledTime}, creating today's note...`);

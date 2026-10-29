@@ -588,30 +588,15 @@ If extending or modifying the scheduling system:
 
 ## Settings Architecture
 
-**Two-Level Settings Structure:**
+**Settings Structure:**
 
-1. **Global Settings** (apply to all note types):
-   - `alwaysOpen` - Always open notes when created (overrides per-note `openAndPin`)
-   - `processTemplater` - Enable Templater integration
-   - `debug` - Enable debug logging
+1. **Synced settings** (`data.json`, `src/settings/index.ts`):
+   - `processTemplater`, `debug`
+   - Per note type (daily, weekly, monthly, quarterly, yearly): `available` (synced from Periodic Notes, kept in memory), `enabled` (create automatically), `openAndPin` (keep the current note open and pinned), `closeExisting` (close older notes of the same type)
+   - Daily only: `excludeWeekends`, `openAtFirstPosition`, `unpinOldDailyNotes` (at the switch time, unpin instead of close), `scheduledTime` (the switch time in UTC, `HH:mm`; empty means no switch and local dates)
+   - `applyDefaultSettings` migrates 0.6.x data: `alwaysOpen` and `createTomorrowsNote` are dropped, and `enableAdvancedScheduling: false` clears `scheduledTime`. `toSavedSettings` still writes `enableAdvancedScheduling` for devices on 0.6.x (interim).
 
-2. **Per-Periodicity Settings** (daily, weekly, monthly, quarterly, yearly):
-   - `available` - Synced from Periodic Notes plugin (read-only in UI)
-   - `enabled` - User toggle for auto-creation
-   - `closeExisting` - Close older notes of same type
-   - `openAndPin` - Open and pin new notes in tabs
-   - `excludeWeekends` - (Daily only) Skip weekend note creation
-   - `openAtFirstPosition` - (Daily only) Open at first tab position
-
-3. **Daily Advanced Scheduling Settings** (daily only):
-   - `enableAdvancedScheduling` - Enable user-configurable scheduled time
-   - `createTomorrowsNote` - (Legacy) Create tomorrow's note at scheduled time
-   - `unpinOldDailyNotes` - Unpin old daily notes instead of closing them
-
-4. **Device-Specific Settings**:
-   - `deviceSettings[deviceId].scheduledTime` - Per-device scheduled time (e.g., "22:30")
-   - Falls back to `daily.scheduledTime` if not set for current device
-   - Syncs across devices via Obsidian Sync while maintaining device independence
+2. **Device-local settings** (`src/settings/device.ts`, Obsidian local storage, never synced): `createNotes` (only this device creates notes) and `lastExecutionDate` (last switch run).
 
 **Settings Synchronization:**
 The plugin listens for `PERIODIC_NOTES_EVENT_SETTING_UPDATED` events from Periodic Notes plugin and automatically updates the `available` flags to match which note types are configured.

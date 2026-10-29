@@ -20,15 +20,19 @@ This plugin respects the settings of the Periodic Notes plugin, creating your no
 
 ## Settings
 
-![Example of Settings screen within Obsidian](/docs/settings.png)
+The settings are grouped by what you want to decide:
 
-Automatic creation can be toggled on and off for each of the supported note types, these are only shown if you have enabled and configured these notes within the Periodic Notes plugin. Within each note type, you can set whether to open and pin the note automatically, or whether to simply create it in the background, showing a notice when complete.
+- **This device**: whether this device creates notes.
+- **Daily switch**: the current daily note, the **Switch time (UTC)** at which every device moves to the next day's note, and whether to skip weekends.
+- **Tabs**: whether the daily note is kept open and pinned, in the first tab, and what happens to older daily notes.
+- **Create automatically**: which note types are created. Each note type other than daily has **Options** for pinning it and closing older ones. Only note types turned on in the Periodic Notes plugin are shown.
+- **Advanced**: Templater processing (when Templater is installed) and debug logging.
 
 ### Creating notes on one device only
 
-Notes are created only on devices where **Create notes on this device** is turned on. It is off by default, so a vault synced across several devices (for example with Obsidian Sync) gets each note from a single device instead of duplicate or conflicting copies. Devices with it off still open, pin, close, and unpin notes at startup, on wake, and at the custom scheduled time, but only for notes that already exist; when the daily note they are waiting for arrives later by sync, they handle it as soon as it appears.
+Notes are created only on devices where **Create notes on this device** is turned on. It is off by default, so a vault synced across several devices (for example with Obsidian Sync) gets each note from a single device instead of duplicate or conflicting copies. Devices with it off still open, pin, close, and unpin notes at startup, on wake, and at the switch time, but only for notes that already exist; when the daily note they are waiting for arrives later by sync, they handle it as soon as it appears.
 
-This switch and the record of the last scheduled run are stored in the device's local storage and are never synced. The custom scheduled time is synced and is a UTC time, so every device acts at the same instant whatever its time zone; while it is set, the date of the daily note follows UTC as well, so devices in different time zones always pin the same note. The settings tab shows what the UTC time is on each device's clock. For example, 14:00 UTC is 22:00 in Shanghai: before then the note is today's (in Shanghai), and from then on it is tomorrow's. Turn the switch on only on the one device that should create notes.
+This switch and the record of the last switch are stored in the device's local storage and are never synced. The switch time is synced and is a UTC time, so every device acts at the same instant whatever its time zone; while it is set, the date of the daily note follows UTC as well, so devices in different time zones always pin the same note. The settings tab shows the switch time on each device's clock. For example, 14:00 UTC is 22:00 in Shanghai: before then the note is today's (in Shanghai), and from then on it is tomorrow's. Leave the switch time empty to follow each device's own date instead. Turn the device switch on only on the one device that should create notes.
 
 ## Development
 

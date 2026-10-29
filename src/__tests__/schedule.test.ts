@@ -164,8 +164,6 @@ describe('Daily Note Scheduling', () => {
     const freshPlugin = new AutoPeriodicNotesTestable(app, manifest);
     await freshPlugin.loadSettings();
 
-    // Enable advanced scheduling for timer test
-    freshPlugin.settings.daily.enableAdvancedScheduling = true;
     freshPlugin.settings.daily.available = true;
     freshPlugin.settings.daily.scheduledTime = '22:30';
 

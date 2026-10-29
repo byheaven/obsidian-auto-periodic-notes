@@ -1,5 +1,5 @@
 /** @jest-environment ./src/test-environments/time-zone-environment.js */
-import { applyDefaultSettings, describeScheduledTime, type ISettings } from '../../settings';
+import { applyDefaultSettings, nextSwitchOnThisDevice, type ISettings } from '../../settings';
 
 declare const setTimeZone: (zone: string) => void;
 
@@ -10,7 +10,6 @@ describe('settings', () => {
 
     const result = applyDefaultSettings(settings);
 
-    expect(result.alwaysOpen).toEqual(false);
     expect(result.debug).toEqual(false);
     expect(result.daily.available).toEqual(false);
     expect(result.daily.enabled).toEqual(false);
@@ -39,7 +38,6 @@ describe('settings', () => {
   it('applies default values for new fields when loading old saved settings', () => {
     // Simulate old saved settings without new fields (debug, excludeWeekends, openAtFirstPosition)
     const oldSettings = {
-      alwaysOpen: false,
       daily: {
         available: true,
         enabled: true,
@@ -75,7 +73,6 @@ describe('settings', () => {
     const result = applyDefaultSettings(oldSettings);
 
     // Check that existing fields are preserved
-    expect(result.alwaysOpen).toEqual(false);
     expect(result.daily.available).toEqual(true);
     expect(result.daily.enabled).toEqual(true);
     expect(result.daily.closeExisting).toEqual(false);
@@ -88,27 +85,81 @@ describe('settings', () => {
   });
 
 
-  describe('scheduled time hint', () => {
+  describe('settings saved by 0.6.2', () => {
+    const period = { available: true, enabled: true, closeExisting: false, openAndPin: false };
+    const saved062 = () => ({
+      alwaysOpen: true,
+      processTemplater: true,
+      debug: false,
+      daily: {
+        available: true, enabled: true, closeExisting: true, openAndPin: true, excludeWeekends: false,
+        openAtFirstPosition: true, enableAdvancedScheduling: true, createTomorrowsNote: true,
+        unpinOldDailyNotes: true, scheduledTime: '14:00',
+      },
+      weekly: { ...period }, monthly: { ...period }, quarterly: { ...period }, yearly: { ...period },
+    });
+
+    it('keep every value and drop the removed settings', () => {
+      expect(applyDefaultSettings(saved062())).toEqual({
+        processTemplater: true,
+        debug: false,
+        daily: {
+          available: true, enabled: true, closeExisting: true, openAndPin: true, excludeWeekends: false,
+          openAtFirstPosition: true, unpinOldDailyNotes: true, scheduledTime: '14:00',
+        },
+        weekly: period, monthly: period, quarterly: period, yearly: period,
+      });
+    });
+
+    it('leave the switch time unset when custom scheduling was off', () => {
+      const saved = saved062();
+      saved.daily.enableAdvancedScheduling = false;
+
+      const result = applyDefaultSettings(saved);
+
+      expect(result.daily.scheduledTime).toBe('');
+      expect(applyDefaultSettings(JSON.parse(JSON.stringify(result))).daily.scheduledTime).toBe('');
+    });
+
+    it('come out the same when loaded again', () => {
+      const migrated = applyDefaultSettings(saved062());
+
+      expect(applyDefaultSettings(JSON.parse(JSON.stringify(migrated)))).toEqual(migrated);
+    });
+
+    it('keep each note type\'s pin setting whatever alwaysOpen was', () => {
+      const saved = saved062();
+      saved.alwaysOpen = false;
+
+      const result = applyDefaultSettings(saved);
+
+      expect(result.daily.openAndPin).toBe(true);
+      expect(result.weekly.openAndPin).toBe(false);
+    });
+  });
+
+  describe('next switch on this device', () => {
     it.each([
-      ['Asia/Shanghai', '14:00', '2026-10-29T03:00:00Z', '14:00 UTC = 22:00 on this device (Asia/Shanghai)'],
-      ['America/Los_Angeles', '14:00', '2026-10-29T03:00:00Z', '14:00 UTC = 07:00 on this device (America/Los_Angeles)'],
-      ['America/Los_Angeles', '14:00', '2026-11-02T03:00:00Z', '14:00 UTC = 06:00 on this device (America/Los_Angeles)'],
-      ['America/Los_Angeles', '14:00', '2026-10-31T20:00:00Z', '14:00 UTC = 06:00 on this device (America/Los_Angeles)'],
-      ['Asia/Shanghai', '20:00', '2026-10-29T03:00:00Z', '20:00 UTC = 04:00 on this device (Asia/Shanghai)'],
-    ])('in %s shows %s UTC at %s as the next run on the local clock', (zone, time, now, expected) => {
+      ['Asia/Shanghai', '14:00', '2026-10-29T03:00:00Z', '22:00'],
+      ['America/Los_Angeles', '14:00', '2026-10-29T03:00:00Z', '07:00'],
+      ['America/Los_Angeles', '14:00', '2026-11-02T03:00:00Z', '06:00'],
+      ['America/Los_Angeles', '14:00', '2026-10-31T20:00:00Z', '06:00'],
+      ['Asia/Shanghai', '20:00', '2026-10-29T03:00:00Z', '04:00'],
+    ])('in %s shows %s UTC at %s as %s on the local clock', (zone, time, now, localTime) => {
       setTimeZone(zone);
 
-      expect(describeScheduledTime(time, new Date(now))).toBe(expected);
+      expect(nextSwitchOnThisDevice(time, new Date(now))).toEqual({ localTime, zone });
     });
 
     it('handles zones with a half-hour offset', () => {
       setTimeZone('Asia/Kolkata');
 
-      expect(describeScheduledTime('14:00', new Date('2026-10-29T03:00:00Z'))).toMatch(/^14:00 UTC = 19:30 on this device \(Asia\/(Kolkata|Calcutta)\)$/);
+      expect(nextSwitchOnThisDevice('14:00', new Date('2026-10-29T03:00:00Z'))?.localTime).toBe('19:30');
     });
 
-    it('describes nothing without a valid time', () => {
-      expect(describeScheduledTime('')).toBe('');
+    it('has no switch without a valid time', () => {
+      expect(nextSwitchOnThisDevice('')).toBeNull();
+      expect(nextSwitchOnThisDevice('25:00')).toBeNull();
     });
   });
 });
