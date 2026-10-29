@@ -407,6 +407,8 @@ export default class NotesProvider {
     const shouldOpenAtFirstPosition = term === 'daily' &&
       'openAtFirstPosition' in setting &&
       (setting as any).openAtFirstPosition;
+    // Re-read the tabs: while this run paused after closing tabs, the user or another plugin may have opened the note
+    this.workspaceLeaves = {};
     let leaf: WorkspaceLeaf | undefined = this.getOpenWorkspaceLeaves()[note.path];
 
     debug(`handleOpen called: notePath=${note.path}, isAlreadyOpen=${!!leaf}`);

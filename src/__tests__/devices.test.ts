@@ -253,6 +253,26 @@ describe('Tab handling across devices', () => {
     expect(tabs()).toEqual([[TOMORROW, true], [TODAY, true]]);
   });
 
+  it.each([true, false])('keeps a daily note the user creates and opens by hand in one tab (createNotes=%s)', async (createNotes) => {
+    const { device, tabs } = await startDevice({ createNotes, at: '2026-10-28T08:00:00', tabs: [[TODAY, true], [INBOX, false]] });
+    // The user deletes today's note, which closes its tab
+    mockVault.paths.delete(TODAY);
+    let activeLeaf: FakeLeaf | undefined;
+    (device.app.workspace as any).iterateAllLeaves((leaf: FakeLeaf) => {
+      if (leaf.file === TODAY) leaf.detach();
+      else activeLeaf = leaf;
+    });
+
+    // Periodic Notes recreates today's note, then opens it in the active tab
+    mockVault.add(TODAY);
+    await Promise.resolve();
+    activeLeaf!.openFile({ path: TODAY });
+    await settle();
+    await settle();
+
+    expect(tabs()).toEqual([[TODAY, true]]);
+  });
+
   it('opens the daily note once when it arrives while a wake run is in progress', async () => {
     mockVault.paths.delete(TODAY);
     const { tabs } = await startDevice({ createNotes: false, at: '2026-10-28T08:00:00', tabs: [[PREVIOUS, true], [INBOX, false]] });
