@@ -1,4 +1,4 @@
-/** @jest-environment ./src/__tests__/time-zone-environment.js */
+/** @jest-environment ./src/test-environments/time-zone-environment.js */
 import { App, Setting, TextComponent, ToggleComponent } from 'obsidian';
 import AutoTasks from '../..';
 import { DEFAULT_SETTINGS } from '../../settings';

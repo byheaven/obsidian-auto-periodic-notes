@@ -1,4 +1,4 @@
-/** @jest-environment ./src/__tests__/time-zone-environment.js */
+/** @jest-environment ./src/test-environments/time-zone-environment.js */
 import { readFileSync } from 'fs';
 import { EventRef, PluginManifest, PluginSettingTab, TAbstractFile } from 'obsidian';
 import { DailyNote } from 'obsidian-periodic-notes-provider';
@@ -29,13 +29,24 @@ const mockVault = {
 };
 
 jest.mock('obsidian-periodic-notes-provider');
-jest.mock('obsidian-daily-notes-interface', () => ({
-  DEFAULT_DAILY_NOTE_FORMAT: 'YYYY-MM-DD',
-  getDailyNoteSettings: () => ({ folder: 'journals', format: 'YYYY-MM-DD', template: '' }),
-  getAllDailyNotes: () => ({}),
-  getDailyNote: (date: { format(format: string): string }) => mockVault.get(`journals/${date.format('YYYY-MM-DD')}.md`),
-  createDailyNote: async (date: { format(format: string): string }) => mockVault.create(`journals/${date.format('YYYY-MM-DD')}.md`),
-}));
+// Like the real library, notes are found by the start of their day in local time, wherever they are filed.
+jest.mock('obsidian-daily-notes-interface', () => {
+  const moment = jest.requireActual('moment');
+  const dayKey = (date: moment.Moment) => date.clone().startOf('day').format();
+  return {
+    DEFAULT_DAILY_NOTE_FORMAT: 'YYYY-MM-DD',
+    getDailyNoteSettings: () => ({ folder: 'journals', format: 'YYYY-MM-DD', template: '' }),
+    getAllDailyNotes: () => ({}),
+    getDailyNote: (date: moment.Moment) => {
+      const path = [...mockVault.paths].find((candidate) => {
+        const match = candidate.match(/^journals\/(?:.*\/)?(\d{4}-\d{2}-\d{2})\.md$/);
+        return match && dayKey(moment(match[1], 'YYYY-MM-DD', true)) === dayKey(date);
+      });
+      return path ? { path } : null;
+    },
+    createDailyNote: async (date: moment.Moment) => mockVault.create(`journals/${date.format('YYYY-MM-DD')}.md`),
+  };
+});
 
 const day = (date: string) => `journals/${date}.md`;
 const PREVIOUS = day('2026-10-27');
@@ -474,6 +485,23 @@ describe('Tab handling across devices', () => {
       await sleepAndWakeAt('2026-10-30T14:30:00Z');
       expect(mockVault.created).toEqual([day('2026-10-31')]);
       expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-31')]);
+    });
+
+    it('uses UTC days with the advanced daily options off', async () => {
+      const data = syncedSettings('14:00') as { daily: Record<string, unknown> };
+      data.daily = { ...data.daily, createTomorrowsNote: false, unpinOldDailyNotes: false };
+      const { tabs } = await startDevice({ createNotes: false, at: '2026-10-29T03:00:00Z', tabs: [[day('2026-10-28'), true]], data, localRecord: noRunYet(false) });
+
+      expect(pinnedDailyNotes(tabs())).toEqual([day('2026-10-29')]);
+    });
+
+    it('finds a note filed outside the default path instead of creating another', async () => {
+      mockVault.paths.delete(day('2026-10-30'));
+      mockVault.paths.add('journals/2026/2026-10-30.md');
+      const { tabs } = await startDevice({ createNotes: true, at: '2026-10-29T15:00:00Z', data: syncedSettings('14:00'), localRecord: noRunYet(true) });
+
+      expect(mockVault.created).toEqual([]);
+      expect(pinnedDailyNotes(tabs())).toEqual(['journals/2026/2026-10-30.md']);
     });
 
     it('applies any UTC time, not only the Shanghai evening', async () => {

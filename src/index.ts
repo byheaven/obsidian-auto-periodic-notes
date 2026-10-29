@@ -237,8 +237,12 @@ export default class AutoPeriodicNotes extends Plugin {
 
   // With a scheduled time set, days run on UTC so every device agrees on the current daily note
   // whatever its own time zone; the scheduled time itself is a UTC time of day.
+  public usesUtcDays(): boolean {
+    return this.getScheduledTime() !== '';
+  }
+
   public dayClock(): Moment {
-    return this.getScheduledTime() ? moment.utc() : moment();
+    return this.usesUtcDays() ? moment.utc() : moment();
   }
 
   private isAfterScheduledTime(now: Date): boolean {

@@ -188,7 +188,7 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
 
     new Setting(advancedContainer)
       .setName('Enable custom scheduled time')
-      .setDesc('Schedule an additional daily check at a custom time (e.g., 22:30 to create tomorrow\'s note before sleep).')
+      .setDesc('Schedule an additional daily check at a custom time (e.g., 14:00 UTC, which is 22:00 in Shanghai, to create tomorrow\'s note before sleep).')
       .addToggle((toggle) => {
         toggle
           .setValue(settings.daily.enableAdvancedScheduling)
@@ -202,7 +202,7 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
     // Show dependent settings only if advanced scheduling is enabled
     if (settings.daily.enableAdvancedScheduling) {
       const scheduledTimeDesc = (time: string) =>
-        `Time for the custom check in UTC (24-hour format), the same instant on every device. Every device opens and pins notes at this time; only devices that create notes create them. While it is set, the date of the daily note follows UTC too. ${describeScheduledTime(time)}.`;
+        `Time for the custom check in UTC (24-hour format), the same instant on every device. Every device opens and pins notes at this time; only devices that create notes create them. While it is set, the date of the daily note follows UTC too.${time ? ` ${describeScheduledTime(time)}.` : ''}`;
       const scheduledTimeSetting = new Setting(advancedContainer)
         .setName('Scheduled time (UTC)')
         .setDesc(scheduledTimeDesc(settings.daily.scheduledTime));
@@ -217,7 +217,7 @@ export default class AutoPeriodicNotesSettingsTab extends PluginSettingTab {
                 scheduledTimeSetting.setDesc(scheduledTimeDesc(val));
                 await this.plugin.updateSettings(settings);
               } else {
-                new Notice('Invalid time format. Use HH:mm (e.g., 22:30)');
+                new Notice('Invalid time format. Use HH:mm in UTC (e.g., 14:00)');
               }
             });
         });

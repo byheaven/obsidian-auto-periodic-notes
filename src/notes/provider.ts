@@ -31,6 +31,12 @@ export function getNextDailyDate(from: Moment, excludeWeekends: boolean): Moment
   return date;
 }
 
+// The note libraries match notes by local-time dates, so a date from the UTC day clock is handed to them as the same
+// calendar date in local time.
+function toNoteDate(date: Moment): Moment {
+  return date.clone().local(true);
+}
+
 export function getDailyNotePath(date: Moment): string {
   const noteSettings = getDailyNoteSettings();
   const format = noteSettings.format || DEFAULT_DAILY_NOTE_FORMAT;
@@ -99,7 +105,7 @@ export default class NotesProvider {
 
         // Determine which behavior to use based on context
         const isScheduledTime = context?.scheduleName === 'scheduledTime';
-        const useAdvancedPath = isScheduledTime || nextPeriod || dailySettings.createTomorrowsNote || dailySettings.unpinOldDailyNotes;
+        const useAdvancedPath = isScheduledTime || nextPeriod || dailySettings.createTomorrowsNote || dailySettings.unpinOldDailyNotes || this.plugin.usesUtcDays();
 
         if (useAdvancedPath) {
           // Use obsidian-daily-notes-interface for date-specific operations
@@ -122,14 +128,16 @@ export default class NotesProvider {
             }
           }
 
+          const noteDate = toNoteDate(targetDate);
+
           // Check if note exists for target date
           const allDailyNotes = getAllDailyNotes();
-          let existingNote = getDailyNote(targetDate, allDailyNotes);
+          let existingNote = getDailyNote(noteDate, allDailyNotes);
 
           // Fallback: if cache doesn't have the note, check filesystem directly
           // This handles synced files that haven't been indexed yet
           if (!existingNote) {
-            const filepath = getDailyNotePath(targetDate);
+            const filepath = getDailyNotePath(noteDate);
             const file = this.app.vault.getAbstractFileByPath(filepath);
             // Check if file exists and is a file (not a folder) - use duck typing for test compatibility
             if (file && 'path' in file && (file as TFile).path?.endsWith('.md')) {
@@ -144,7 +152,7 @@ export default class NotesProvider {
             }
             // Create the note for target date
             debug(`Creating daily note for ${targetDate.format('YYYY-MM-DD')}`);
-            const newNote = await createDailyNote(targetDate);
+            const newNote = await createDailyNote(noteDate);
 
             // Determine if this is a future-dated note (tomorrow or later)
             // Check if targetDate is after today at the day level
@@ -243,9 +251,11 @@ export default class NotesProvider {
             debug(`Target date for next period ${term}: ${targetDate.format('YYYY-MM-DD')}`);
           }
 
+          const noteDate = toNoteDate(targetDate);
+
           // Check if note exists for target date using library functions
           const allNotes = helpers.getAll();
-          let existingNote = helpers.get(targetDate, allNotes);
+          let existingNote = helpers.get(noteDate, allNotes);
 
           // Fallback: if cache doesn't have the note, check filesystem directly
           // This handles synced files that haven't been indexed yet
@@ -253,7 +263,7 @@ export default class NotesProvider {
             const noteSettings = helpers.getSettings();
             const format = noteSettings.format || helpers.defaultFormat;
             const folder = noteSettings.folder?.trim() || '';
-            const filename = targetDate.format(format);
+            const filename = noteDate.format(format);
             const filepath = folder ? `${folder}/${filename}.md` : `${filename}.md`;
 
             const file = this.app.vault.getAbstractFileByPath(filepath);
@@ -269,7 +279,7 @@ export default class NotesProvider {
             }
             // Create the note for target date
             debug(`Creating ${term} note for ${targetDate.format('YYYY-MM-DD')}`);
-            const newNote = await helpers.create(targetDate);
+            const newNote = await helpers.create(noteDate);
 
             const periodLabel = this.getPeriodLabel(term, nextPeriod);
             new Notice(`${periodLabel} note has been created.`, 5000);

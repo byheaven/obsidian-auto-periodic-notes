@@ -1,4 +1,4 @@
-/** @jest-environment ./src/__tests__/time-zone-environment.js */
+/** @jest-environment ./src/test-environments/time-zone-environment.js */
 import { applyDefaultSettings, describeScheduledTime, type ISettings } from '../../settings';
 
 declare const setTimeZone: (zone: string) => void;
